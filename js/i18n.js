@@ -1,8 +1,15 @@
+import { FR_SELL } from './fr.js';
 // Screens are written in English and shown in French by default. t('Text {n}', {n: 3}).
 // Customer documents (invoices, proformas, statements) are always French.
 let LANG = 'fr';
 try { LANG = localStorage.getItem('sl-lang') || 'fr'; } catch { /* private mode */ }
 export const lang = () => LANG;
+// Runs fn with screens in another language without saving it (customer documents are French).
+export function withLang(l, fn) {
+  const keep = LANG;
+  LANG = l;
+  try { return fn(); } finally { LANG = keep; }
+}
 export function setLang(l) {
   LANG = l === 'en' ? 'en' : 'fr';
   try { localStorage.setItem('sl-lang', LANG); } catch { /* private mode */ }
@@ -94,3 +101,4 @@ const FR = {
   'Firebase writes needed': 'Écritures Firebase nécessaires', 'Free limit per day': 'Limite gratuite par jour',
   'Key figures': 'Chiffres clés', 'Old app': 'Ancienne appli', 'New app': 'Nouvelle appli'
 };
+Object.assign(FR, FR_SELL);

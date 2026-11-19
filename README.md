@@ -15,8 +15,8 @@ version of the Flask app, rebuilt as one page that runs on the phone itself.
 | Stage | What | State |
 |---|---|---|
 | 1a | Sign-in, offline sync, import of the old app's backup with a full check, read-only screens: home, stock, inventory, customers, sales, invoices | Done |
-| 1b | Selling: new orders, boxes and loose pairs, delivery, invoices, payments, returns | Next |
-| 2 | Purchasing, shipments, suppliers, buying plan | |
+| 1b | Selling: new orders, boxes and loose pairs, delivery, invoices, payments, returns, customers, styles and sizes, box actions, printed invoice and statement | Done |
+| 2 | Purchasing, shipments, suppliers, buying plan | Next |
 | 3 | Expenses, accounts, partners, currencies, reports | |
 | 4 | Proformas, CRM, price list, backups | |
 | 5 | Final data move and switch-over | |
@@ -60,6 +60,10 @@ and 20,000 writes a day).
 fills SQLite, then listens only for buckets changed since the last visit. A change is written
 to SQLite at once and uploaded in the background; Firestore queues it while offline.
 
+**Changes.** An operation (a form) runs the old app's SQL on the device copy inside one SQLite
+savepoint: either all of it happens or none of it (a refusal rolls it back). Triggers note every row
+it touched, and only those rows are uploaded. Ports of the old handlers live in `js/ops/`.
+
 **Photos and documents** have their own collections (`images`, `files`), one document each,
 fetched only when shown. Photos are shrunk to phone size; documents over 700 KB can't be kept
 (Firebase Storage needs the paid plan since February 2026).
@@ -88,6 +92,11 @@ the new version), push to GitHub. Phones switch to the new version the next time
 opens with internet.
 
 ## Tests
+
+- `tests/diff_run.sh OLD_APP_DIR erp.db workdir` — runs the same steps (new orders, boxes, loose pairs,
+  delivery, payments, returns, cancelling, deleting, customers, styles, box actions…) through the old
+  Python app and through the new app, then compares every table row by row.
+- `node tests/e2e_sell.cjs backup.zip outdir [--phone]` — clicks through selling in a browser.
 
 - `node tests/e2e.cjs backup.zip outdir [--phone]` — imports a backup into a fake Firebase,
   checks the report, visits the screens and saves screenshots.

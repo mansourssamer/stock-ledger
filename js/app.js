@@ -199,6 +199,7 @@ document.addEventListener('submit', async e => {
 });
 window.addEventListener('hashchange', () => { UI.menuOpen = false; window.scrollTo(0, 0); schedule(); });
 window.addEventListener('online', () => { S.online = true; schedule(); });
+window.addEventListener('sl-toast', e => toast(e.detail));
 window.addEventListener('offline', () => { S.online = false; schedule(); });
 
 // ---------- start ----------

@@ -8,6 +8,8 @@ import { schedule } from './app.js';
 import { importScreen } from './importer.js';
 import { getBlob } from './store.js';
 import { registerActions } from './actions.js';
+import { renderOrder } from './sell.js';
+import { renderDoc } from './docs.js';
 
 const UI = { stockQ: '', custQ: '', orderQ: '', orderStatus: '' };
 const hasData = () => !!val(`SELECT 1 FROM products LIMIT 1`) || !!val(`SELECT 1 FROM customers LIMIT 1`);
@@ -17,7 +19,7 @@ const invPill = s => pill(t(s), { paid: 'good', partial: 'warn', unpaid: 'bad', 
 const mixHref = (po, label) => `mix/${po ?? 'none'}/${encodeURIComponent(label || '')}`;
 // Big amounts (millions of francs) in a tile read better short: 5,3 M FG. The exact figure is in the panel below.
 const tileMoney = (v, cur) => esc(Math.abs(v) >= 100000 ? fmtShort(v, cur) : fmtMoney(v, cur));
-const orderNo = id => typeof id === 'number' ? `#${id}` : `#${String(id).slice(-5).toUpperCase()}`;
+const orderNo = id => `#${Q.orderRef(id)}`;
 
 function bindSearch(id, key) {
   const el = document.getElementById(id);
@@ -33,7 +35,7 @@ function home() {
   }
   const d = Q.dashboardFigures();
   const owed = d.outstanding_count === 1 ? t('on 1 invoice') : t('on {n} invoices', { n: d.outstanding_count });
-  const out = [header(t('Home'), { sub: esc(fmtDate(new Date().toISOString())) })];
+  const out = [header(t('Home'), { sub: esc(fmtDate(new Date().toISOString())), actions: `<button class="btn primary" data-act="newOrder">+ ${esc(t('New order'))}</button>` })];
   out.push(tiles([
     tile(t('Stock value'), fmtShort(d.stock_value), esc(t('at landed cost')), 'stock', 'hl'),
     tile(t('Customers owe'), fmtShort(d.outstanding_total), esc(owed), 'customers', d.outstanding_total > 0 ? 'neg' : ''),
@@ -73,7 +75,7 @@ function stock() {
       `${fmtQty(p.total)} ${p.low ? pill(t('low'), 'warn') : ''}`,
       esc(fmtUsd(p.sale_price))] };
   });
-  return header(t('Stock'), { sub: `${styles.length} ${esc(t('Styles').toLowerCase())} · ${fmtQty(totalPairs)} ${esc(t('pairs'))}` })
+  return header(t('Stock'), { sub: `${styles.length} ${esc(t('Styles').toLowerCase())} · ${fmtQty(totalPairs)} ${esc(t('pairs'))}`, actions: `<button class="btn" data-act="newProduct">+ ${esc(t('New style'))}</button>` })
     + `<div class="inline">${search('q-stock', UI.stockQ, t('Search a style, brand or code'))}</div>`
     + panel('', table([{ h: t('Styles') }, { h: t('Color'), cls: 'hide-sm' }, { h: t('On hand'), n: true }, { h: t('Price'), n: true, cls: 'hide-sm' }], rows, { emptyText: t('No products yet.') }), { tight: true });
 }
@@ -86,9 +88,11 @@ function product(id) {
   const avail = Q.allVariantStock().filter(v => v.product_id === pid);
   const total = sum(vs, v => v.qty_on_hand);
   const value = sum(vs, v => Math.max(v.qty_on_hand, 0) * Q.loosePairCost(v.variant_id));
-  const rows = vs.map(v => ({ cls: v.qty_on_hand <= p.reorder_level ? 'warnrow' : '', cells: [esc(v.color || '—'), `<b>${esc(v.size)}</b>`, `<span class="mono">${esc(v.sku)}</span>`, fmtQty(v.qty_on_hand)] }));
+  const rows = vs.map(v => ({ cls: v.qty_on_hand <= p.reorder_level ? 'warnrow' : '', cells: [esc(v.color || '—'), `<b>${esc(v.size)}</b>`, `<span class="mono">${esc(v.sku)}</span>`, fmtQty(v.qty_on_hand),
+    `<div class="rowacts"><button class="btn sm" data-act="adjust" data-id="${esc(v.variant_id)}">${esc(t('Adjust'))}</button><button class="btn sm ghost" data-act="renameSize" data-id="${esc(v.variant_id)}">${esc(t('Rename'))}</button><button class="btn sm ghost danger" data-act="delSize" data-id="${esc(v.variant_id)}">✕</button></div>`] }));
   void avail;
-  return header(p.name, { back: 'stock', eyebrow: [p.brand, p.category].filter(Boolean).join(' · '), sub: `<span class="mono">${esc(p.sku_prefix)}</span>` })
+  return header(p.name, { back: 'stock', eyebrow: [p.brand, p.category].filter(Boolean).join(' · '), sub: `<span class="mono">${esc(p.sku_prefix)}</span>`,
+      actions: `<button class="btn" data-act="editProduct" data-id="${esc(pid)}">${esc(t('Edit'))}</button><button class="btn primary" data-act="addSize" data-id="${esc(pid)}">+ ${esc(t('Add a size'))}</button>` })
     + tiles([
       tile(t('On hand'), fmtQty(total), esc(t('pairs'))),
       tile(t('Value'), fmtShort(value), esc(t('at landed cost'))),
@@ -96,8 +100,8 @@ function product(id) {
       tile(t('Price'), esc(fmtUsd(p.sale_price)), esc(t('per pair')))
     ])
     + `<div id="pimg" class="pimg" data-img="${esc(p.image_filename || '')}"></div>`
-    + panel(t('Sizes and stock'), table([{ h: t('Color') }, { h: t('Size') }, { h: t('Code'), cls: 'hide-sm' }, { h: t('On hand'), n: true }], rows,
-      { foot: ['', '', '', fmtQty(total)], emptyText: '—' }), { tight: true });
+    + panel(t('Sizes and stock'), table([{ h: t('Color') }, { h: t('Size') }, { h: t('Code'), cls: 'hide-sm' }, { h: t('On hand'), n: true }, { h: '' }], rows,
+      { foot: ['', '', '', fmtQty(total), ''], emptyText: t('No sizes yet: add the first one.') }), { tight: true });
 }
 
 // ---------- inventory: mixes of boxes ----------
@@ -139,8 +143,10 @@ function mix(po, label) {
     { foot: [t('Total'), '', '', fmtQty(ppb), esc(fmtUsd(cost))] });
   const boxRows = list.map(b => ({ cells: [`<span class="mono">${esc(b.box_code)}</span>`, statusPill(b.status),
     esc(b.status === 'sold' ? (b.sold_customer_name || '') + (b.sold_order_id ? ` · ${orderNo(b.sold_order_id)}` : '') : (b.location_name || '')), esc(fmtDate(b.sold_at || b.received_at))],
-    href: b.sold_order_id ? `order/${b.sold_order_id}` : '' }));
-  return header(label, { back: 'boxes', eyebrow: t('Mix'), sub: `${esc(fmtDate(list[0].received_at))}` })
+    href: `box/${b.id}` }));
+  const poA = esc(poId ?? 'none'), lA = esc(label);
+  return header(label, { back: 'boxes', eyebrow: t('Mix'), sub: `${esc(fmtDate(list[0].received_at))}`,
+      actions: inStock.length ? `<button class="btn" data-act="openOne" data-po="${poA}" data-l="${lA}">${esc(t('Open a box'))}</button><button class="btn" data-act="moveBoxes" data-po="${poA}" data-l="${lA}">${esc(t('Move boxes'))}</button>` : '' })
     + tiles([
       tile(t('In stock'), fmtNum(inStock.length), esc(t('sealed boxes'))),
       tile(t('Sold'), fmtNum(sold.length), esc(t('boxes'))),
@@ -149,6 +155,30 @@ function mix(po, label) {
     ])
     + panel(t('Contents of one box'), content, { tight: true })
     + panel(t('Boxes of this mix'), table([{ h: t('Box') }, { h: t('Status') }, { h: t('Customer') + ' / ' + t('Location'), cls: 'hide-sm' }, { h: t('Date'), cls: 'hide-sm' }], boxRows), { tight: true });
+}
+
+function box(idRaw) {
+  const bid = /^\d+$/.test(idRaw) ? Number(idRaw) : idRaw;
+  const b = one(`SELECT b.*, s.name as supplier_name, c.name as sold_customer_name, l.name as location_name FROM boxes b
+                 LEFT JOIN purchase_orders po ON po.id = b.source_po_id LEFT JOIN suppliers s ON s.id = po.supplier_id
+                 LEFT JOIN orders o ON o.id = b.sold_order_id LEFT JOIN customers c ON c.id = o.customer_id
+                 LEFT JOIN locations l ON l.id = b.location_id WHERE b.id = ?`, [bid]);
+  if (!b) return header(t('Box'), { back: 'boxes' }) + empty('—');
+  const contents = Q.boxContents(bid);
+  const opened = b.status === 'open' || b.status === 'emptied';
+  const totalPairs = sum(contents, i => i.qty), totalCost = sum(contents, i => i.qty * i.unit_cost);
+  const left = opened ? sum(contents, i => i.qty_left || 0) : null;
+  const sold = val(`SELECT COALESCE(SUM(CASE WHEN kind = 'sale' THEN qty WHEN kind = 'return' THEN -qty ELSE 0 END), 0) FROM pair_picks WHERE box_id = ?`, [bid]);
+  const missing = val(`SELECT COALESCE(SUM(qty), 0) FROM pair_picks WHERE box_id = ? AND kind = 'count'`, [bid]);
+  const acts = [];
+  if (b.status === 'in_stock') acts.push(`<button class="btn" data-act="openBox" data-id="${esc(bid)}">${esc(t('Open'))}</button>`, `<button class="btn ghost danger" data-act="delBox" data-id="${esc(bid)}">${esc(t('Delete'))}</button>`);
+  if (opened) acts.push(`<button class="btn primary" data-act="countBox" data-id="${esc(bid)}">${esc(t('Count'))}</button>`);
+  if (b.status === 'open') acts.push(`<button class="btn" data-act="reseal" data-id="${esc(bid)}">${esc(t('Seal again'))}</button>`);
+  return header(b.box_code, { back: mixHref(b.source_po_id, b.source_label), eyebrow: `${t('Box')} · ${b.source_label || ''}`, sub: `${statusPill(b.status)} ${esc(b.location_name || '')}${b.sold_customer_name ? ' · ' + esc(b.sold_customer_name) : ''}`, actions: acts.join('') })
+    + tiles([tile(t('pairs'), fmtNum(totalPairs), ''), tile(t('Cost'), esc(fmtUsd(totalCost)), esc(t('per box'))),
+      tile(t('Pairs left'), left === null ? '—' : fmtNum(left), opened ? esc(t('{n} sold', { n: sold })) : ''), tile(t('Missing'), fmtNum(missing), '')])
+    + panel(t('Contents of one box'), table([{ h: t('Products') }, { h: t('Size') }, { h: t('pairs'), n: true }, { h: t('Pairs left'), n: true }, { h: t('Cost'), n: true, cls: 'hide-sm' }],
+      contents.map(i => ({ cells: [esc(i.product_name) + (i.color ? `<span class="sub">${esc(i.color)}</span>` : ''), `<b>${esc(i.size)}</b>`, fmtQty(i.qty), opened ? fmtQty(i.qty_left || 0) : '—', esc(fmtUsd(i.unit_cost))] }))), { tight: true });
 }
 
 // ---------- customers ----------
@@ -164,7 +194,7 @@ function customers() {
     `<b>${esc(c.name)}</b><span class="sub">${esc(c.phone || '')}</span>`,
     c.s.outstanding_usd > 0.004 ? `<b class="neg">${esc(fmtUsd(c.s.outstanding_usd))}</b>${c.s.days_outstanding !== null ? `<span class="sub">${esc(t('oldest unpaid: {n} days', { n: c.s.days_outstanding }))}</span>` : ''}` : '<span class="muted">—</span>',
     esc(fmtUsd(c.s.lifetime_sold_usd))] }));
-  return header(t('Customers'), { sub: `${list.length} · ${esc(t('Customers owe'))} ${esc(fmtUsd(owed))}` })
+  return header(t('Customers'), { sub: `${list.length} · ${esc(t('Customers owe'))} ${esc(fmtUsd(owed))}`, actions: `<button class="btn" data-act="newCustomer">+ ${esc(t('New customer'))}</button>` })
     + `<div class="inline">${search('q-cust', UI.custQ, t('Search a name or phone'))}</div>`
     + panel('', table([{ h: t('Customer') }, { h: t('Owes'), n: true }, { h: t('Bought'), n: true, cls: 'hide-sm' }], rows, { emptyText: t('No customers yet.') }), { tight: true });
 }
@@ -182,7 +212,8 @@ function customer(id) {
         : `${esc(t('Return'))}<span class="sub">${esc(t('{n} returned', { n: e.qty }))}${e.note ? ' — ' + esc(e.note) : ''}</span>`,
     e.charge ? esc(fmtMoney(e.charge, e.currency_code)) : '', e.payment ? esc(fmtMoney(e.payment, e.currency_code)) : '', esc(fmtMoney(e.balance, e.currency_code))] }));
   const buyRows = buying.map(b => ({ cells: [esc(b.source_label), fmtNum(b.boxes), esc(fmtMoney(b.avg_price, b.currency_code)), esc(fmtDate(b.last_bought))] }));
-  return header(c.name, { back: 'customers', sub: esc([c.phone, c.address].filter(Boolean).join(' · ')) })
+  return header(c.name, { back: 'customers', sub: esc([c.phone, c.address].filter(Boolean).join(' · ')),
+      actions: `<button class="btn primary" data-act="newOrder" data-c="${esc(cid)}">+ ${esc(t('New order'))}</button>${s.outstanding_usd > 0.004 ? `<button class="btn" data-act="payCustomer" data-id="${esc(cid)}">${esc(t('Record a payment'))}</button>` : ''}<a class="btn" href="#/doc/statement/${esc(cid)}">${esc(t('Statement'))}</a><button class="btn ghost" data-act="editCustomer" data-id="${esc(cid)}">${esc(t('Edit'))}</button><button class="btn ghost danger" data-act="delCustomer" data-id="${esc(cid)}">${esc(t('Delete'))}</button>` })
     + tiles([
       tile(t('Owes'), fmtShort(s.outstanding_usd), s.days_outstanding !== null ? esc(t('oldest unpaid: {n} days', { n: s.days_outstanding })) : '', '', s.outstanding_usd > 0.004 ? 'neg' : ''),
       tile(t('Lifetime sales'), fmtShort(s.lifetime_sold_usd), `${s.invoice_count} ${esc(plural(s.invoice_count, 'invoice', 'invoices'))}`),
@@ -207,50 +238,9 @@ function orders() {
     `<span class="mono">${orderNo(o.id)}</span><span class="sub">${esc(fmtDate(o.created_at))}</span>`,
     esc(o.customer_name || t('Walk-in customer')) + (o.boxes ? `<span class="sub">${fmtNum(o.boxes)} ${esc(t('boxes'))}</span>` : ''),
     orderPill(o.status), esc(fmtMoney(o.order_total, o.currency_code))] }));
-  return header(t('Sales'), { sub: `${list.length} ${esc(t('Orders').toLowerCase())}` })
+  return header(t('Sales'), { sub: `${list.length} ${esc(t('Orders').toLowerCase())}`, actions: `<button class="btn primary" data-act="newOrder">+ ${esc(t('New order'))}</button>` })
     + `<div class="inline">${search('q-order', UI.orderQ, t('Search an order or customer'))}<div class="seg">${seg}</div></div>`
     + panel('', table([{ h: t('Order') }, { h: t('Customer') }, { h: t('Status'), cls: 'hide-sm' }, { h: t('Total'), n: true }], rows, { emptyText: t('No orders yet.') }), { tight: true });
-}
-
-function order(id) {
-  const oid = /^\d+$/.test(id) ? Number(id) : id;
-  const o = one(`SELECT o.*, c.name as customer_name FROM orders o LEFT JOIN customers c ON c.id = o.customer_id WHERE o.id = ?`, [oid]);
-  if (!o) return header(t('Sales'), { back: 'orders' }) + empty('—');
-  const [total, boxTotal, looseTotal] = Q.orderTotal(oid);
-  const lines = Q.orderBoxLines(oid);
-  const items = all(`SELECT oi.*, p.name as product_name, v.color, v.size,
-                            COALESCE((SELECT SUM(ri.qty) FROM return_items ri WHERE ri.order_item_id = oi.id), 0) as returned_qty
-                     FROM order_items oi JOIN variants v ON v.id = oi.variant_id JOIN products p ON p.id = v.product_id
-                     WHERE oi.order_id = ? AND oi.box_id IS NULL ORDER BY oi.box_label, p.name, v.size`, [oid]);
-  const invs = all(`SELECT * FROM invoices WHERE order_id = ?`, [oid]).map(i => ({ ...i, ...Q.invoiceFinancials(i.id),
-    payments: all(`SELECT * FROM invoice_payments WHERE invoice_id = ? ORDER BY paid_at, id`, [i.id]) }));
-  const cur = o.currency_code;
-  const out = [header(`${t('Order')} ${orderNo(o.id)}`, { back: 'orders', eyebrow: fmtDate(o.created_at), sub: `${esc(o.customer_name || t('Walk-in customer'))} · ${orderPill(o.status)}` })];
-  out.push(tiles([tile(t('Order total'), tileMoney(total, cur), esc(fmtMoney(total, cur))),
-    tile(t('Whole boxes'), tileMoney(boxTotal, cur), `${fmtNum(sum(lines, l => l.qty_boxes))} ${esc(plural(sum(lines, l => l.qty_boxes), 'box', 'boxes'))}`),
-    tile(t('Loose pairs'), tileMoney(looseTotal, cur), `${fmtNum(sum(items, i => i.qty))} ${esc(plural(sum(items, i => i.qty), 'pair', 'pairs'))}`),
-    tile(t('Invoices'), invs.length ? `<span class="vsm mono">${invs.map(i => esc(i.invoice_number)).join('<br>')}</span>` : '—', invs.map(i => invPill(i.status)).join(' '))]));
-  if (lines.length) {
-    out.push(panel(t('Whole boxes'), table([{ h: t('Mix') }, { h: t('boxes'), n: true }, { h: t('per box'), n: true, cls: 'hide-sm' }, { h: t('Total'), n: true }],
-      lines.map(l => ({ href: mixHref(l.source_po_id, l.source_label), cells: [esc(l.source_label)
-          + `<span class="sub">${esc(fmtMoney(l.price_per_box, cur))} / ${esc(t('box'))}${l.price_per_pair ? ` · ${esc(fmtMoney(l.price_per_pair, cur))} / ${esc(t('pair'))}` : ''}</span>`
-          + (l.returned_boxes ? `<span class="sub">${esc(t('{n} returned', { n: l.returned_boxes }))}</span>` : ''),
-        fmtNum(l.qty_boxes), esc(fmtMoney(l.price_per_box, cur)), esc(fmtMoney(l.line_total, cur))] })),
-      { foot: [t('Total'), fmtNum(sum(lines, l => l.qty_boxes)), '', esc(fmtMoney(boxTotal, cur))] }), { tight: true }));
-  }
-  if (items.length) {
-    out.push(panel(t('Loose pairs'), table([{ h: t('Products') }, { h: t('Size') }, { h: t('pairs'), n: true }, { h: t('per pair'), n: true, cls: 'hide-sm' }, { h: t('Total'), n: true }],
-      items.map(i => ({ cells: [esc(i.product_name) + (i.color ? `<span class="sub">${esc(i.color)}</span>` : ''), esc(i.size), fmtQty(i.qty) + (i.returned_qty ? `<span class="sub">−${i.returned_qty}</span>` : ''),
-        esc(fmtMoney(i.unit_price, cur)), esc(fmtMoney((i.qty - i.returned_qty) * i.unit_price, cur))] }))), { tight: true }));
-  }
-  for (const i of invs) {
-    const pay = i.payments.length ? table([{ h: t('Date') }, { h: t('Notes') }, { h: t('Paid'), n: true }],
-      i.payments.map(p => ({ cells: [esc(fmtDate(p.paid_at)), esc(p.note || ''), esc(fmtMoney(p.amount, cur))] }))) : `<div class="panel-b">${empty(t('No payments yet.'))}</div>`;
-    out.push(panel(`${t('Invoice')} ${i.invoice_number}`, `<div class="panel-b"><div class="kv"><span>${esc(t('Due'))}</span><b>${esc(fmtMoney(i.due, cur))}</b>
-      <span>${esc(t('Paid'))}</span><b>${esc(fmtMoney(i.paid, cur))}</b><span>${esc(t('Balance'))}</span><b>${esc(fmtMoney(i.balance, cur))}</b></div></div>${pay}`,
-      { tight: true, actions: invPill(i.status) }));
-  }
-  return out.join('');
 }
 
 // ---------- invoices ----------
@@ -277,7 +267,9 @@ export const SCREENS = {
   customers: { render: customers, mount: () => bindSearch('q-cust', 'custQ') },
   customer: { render: customer },
   orders: { render: orders, mount: () => bindSearch('q-order', 'orderQ') },
-  order: { render: order },
+  order: { render: renderOrder },
+  box: { render: box },
+  doc: { render: (...a) => renderDoc(...a) },
   invoices: { render: invoices },
   purchasing: { render: later(t('Purchasing')) },
   money: { render: later(t('Money')) },

@@ -295,3 +295,180 @@ export function dashboardFigures() {
     uninvoiced: uninvoicedFulfilled()
   };
 }
+
+// db.pairs_available — per colour/size: pairs sellable one by one (open boxes + loose)
+// less pairs promised on orders not yet delivered.
+export function pairsAvailable(excludeOrderId = null) {
+  const out = new Map();
+  const slot = v => { if (!out.has(v)) out.set(v, { open: 0, sealed: 0, on_hand: 0, loose: 0, committed: 0, available: 0 }); return out.get(v); };
+  for (const r of all(`SELECT bi.variant_id as v,
+        SUM(CASE WHEN b.status = 'open' THEN COALESCE(bi.qty_left, 0) ELSE 0 END) as o,
+        SUM(CASE WHEN b.status = 'in_stock' THEN bi.qty ELSE 0 END) as s
+      FROM box_items bi JOIN boxes b ON b.id = bi.box_id WHERE b.status IN ('in_stock', 'open') GROUP BY bi.variant_id`)) {
+    slot(r.v).open = r.o || 0; slot(r.v).sealed = r.s || 0;
+  }
+  for (const r of all(`SELECT variant_id as v, COALESCE(SUM(change_qty), 0) as q FROM stock_moves GROUP BY variant_id`)) slot(r.v).on_hand = r.q || 0;
+  let sql = `SELECT oi.variant_id as v, SUM(oi.qty) as q FROM order_items oi JOIN orders o ON o.id = oi.order_id
+             WHERE oi.box_id IS NULL AND o.status NOT IN ('fulfilled', 'cancelled')`;
+  const p = [];
+  if (excludeOrderId) { sql += ' AND o.id != ?'; p.push(excludeOrderId); }
+  for (const r of all(sql + ' GROUP BY oi.variant_id', p)) slot(r.v).committed = r.q || 0;
+  for (const d of out.values()) {
+    d.loose = Math.max(d.on_hand - d.sealed - d.open, 0);
+    d.available = Math.max(d.open + d.loose - d.committed, 0);
+  }
+  return out;
+}
+export const pairsAvail = (variantId, excl = null) => (pairsAvailable(excl).get(variantId) || {}).available || 0;
+
+// db.mix_box_cost — average cost of one box of a mix (sold boxes preferred).
+export function mixBoxCost(poId, label) {
+  for (const st of [`AND b.status != 'in_stock'`, '']) {
+    const r = one(`SELECT SUM(bi.qty * bi.unit_cost) as s, COUNT(DISTINCT b.id) as n FROM boxes b JOIN box_items bi ON bi.box_id = b.id
+                   WHERE b.source_po_id IS ? AND b.source_label = ? ${st}`, [poId, label]);
+    if (r && r.n) return r.s / r.n;
+  }
+  return 0;
+}
+
+// app._usd_today / _customer_exposure_usd / _credit_status / _order_usd_today
+export function usdToday(amount, currency) {
+  if (amount === null || amount === undefined) return null;
+  if (!currency || currency === BASE_CURRENCY) return Number(amount);
+  const rate = rateOn(currency, new Date().toISOString().slice(0, 10));
+  return rate ? Number(amount) * rate : null;
+}
+export function customerExposureUsd(customerId, summary = null) {
+  const s = summary || customerSummary(customerId);
+  let unbilled = 0;
+  for (const o of uninvoicedFulfilled(customerId)) {
+    const fx = val(`SELECT COALESCE(fx_rate_to_usd, 1) FROM orders WHERE id = ?`, [o.id]);
+    unbilled += (o.order_total || 0) * fx;
+  }
+  return Math.max(s.outstanding_usd + unbilled - (s.credit_usd || 0), 0);
+}
+export function creditStatus(customer, extraUsd = 0, summary = null) {
+  const limit = customer.credit_limit;
+  if (!limit || limit <= 0) return null;
+  const cur = customer.credit_currency || BASE_CURRENCY;
+  const limitUsd = usdToday(limit, cur);
+  const exposure = customerExposureUsd(customer.id, summary);
+  const after = exposure + (extraUsd || 0);
+  return { limit, currency: cur, limit_usd: limitUsd, exposure_usd: exposure, extra_usd: extraUsd || 0, after_usd: after,
+    over_now: limitUsd !== null && exposure > limitUsd + 0.005, over: limitUsd !== null && after > limitUsd + 0.005,
+    over_by: limitUsd !== null ? after - limitUsd : null, pct: limitUsd ? pyRound(exposure / limitUsd * 100) : null,
+    room_usd: limitUsd !== null ? limitUsd - exposure : null };
+}
+export const orderUsdToday = (orderId, currency) => usdToday(orderTotal(orderId)[0], currency) || 0;
+
+// app._active_invoice / _next_invoice_number
+export const activeInvoice = orderId => one(`SELECT * FROM invoices WHERE order_id = ? AND status != 'void' ORDER BY id LIMIT 1`, [orderId]);
+export function nextInvoiceNumber(year = null) {
+  const prefix = `INV-${year || new Date().getUTCFullYear()}-`;
+  let n = (val(`SELECT MAX(CAST(SUBSTR(invoice_number, ?) AS INTEGER)) FROM invoices WHERE invoice_number LIKE ?`, [prefix.length + 1, prefix + '%']) || 0) + 1;
+  while (val(`SELECT 1 FROM invoices WHERE invoice_number = ?`, [`${prefix}${String(n).padStart(4, '0')}`])) n++;
+  return `${prefix}${String(n).padStart(4, '0')}`;
+}
+
+// ---------- purchase order costs (app._po_*), used for landed costs and recosting ----------
+export function poReceivedDay(poId) {
+  const r = val(`SELECT MIN(received_at) FROM po_box_groups WHERE po_id = ? AND received_at IS NOT NULL`, [poId]);
+  return r ? String(r).slice(0, 10) : null;
+}
+export function poGroupRates(poId, currency) {
+  const out = new Map();
+  let todayRate;
+  for (const g of all(`SELECT id, received_at, fx_rate_to_usd FROM po_box_groups WHERE po_id = ?`, [poId])) {
+    if (g.received_at) out.set(g.id, [g.fx_rate_to_usd || rateOn(currency, g.received_at), true, String(g.received_at).slice(0, 10)]);
+    else { if (todayRate === undefined) todayRate = rateOn(currency); out.set(g.id, [todayRate, false, null]); }
+  }
+  return out;
+}
+export function poGoodsUsd(poId, currency) {
+  const rates = poGroupRates(poId, currency);
+  let total = 0, estimate = false;
+  for (const g of all(`SELECT bg.id, COALESCE(SUM(pi.qty * pi.unit_cost), 0) * bg.box_count as goods FROM po_box_groups bg
+                       LEFT JOIN po_items pi ON pi.po_box_group_id = bg.id WHERE bg.po_id = ? GROUP BY bg.id`, [poId])) {
+    if (!g.goods) continue;
+    const [rate, fixed] = rates.get(g.id) || [null, false];
+    if (rate === null || rate === undefined) return [null, true];
+    total += g.goods * rate;
+    estimate = estimate || !fixed;
+  }
+  return [total, estimate];
+}
+export function poCostLines(poId) {
+  const rows = all(`SELECT pc.*, c.symbol, c.decimals FROM po_costs pc LEFT JOIN currencies c ON c.code = pc.currency_code WHERE pc.po_id = ? ORDER BY pc.id`, [poId]);
+  const received = rows.length ? poReceivedDay(poId) : null;
+  return rows.map(r => {
+    const fixed = r.fx_rate_to_usd !== null;
+    const rate = fixed ? r.fx_rate_to_usd : rateOn(r.currency_code, r.cost_date || received);
+    const rateDay = fixed ? (r.fx_day || r.cost_date || received) : (r.cost_date || received);
+    return { ...r, fx_rate: rate, rate_fixed: fixed, rate_day: rateDay, amount_usd: rate !== null ? r.amount * rate : null };
+  });
+}
+export function poLandedOverheadPerPair(poId) {
+  const lines = poCostLines(poId);
+  let totalUsd = 0;
+  for (const l of lines) if (l.amount_usd !== null) totalUsd += l.amount_usd;
+  const pairs = val(`SELECT COALESCE(SUM(pi.qty * bg.box_count), 0) FROM po_box_groups bg JOIN po_items pi ON pi.po_box_group_id = bg.id WHERE bg.po_id = ?`, [poId]) || 0;
+  if (pairs === 0) return [0, totalUsd, 0];
+  return [totalUsd / pairs, totalUsd, pairs];
+}
+// app._po_cost_plan — what each box of a PO should cost now vs what is recorded.
+export function poCostPlan(poId) {
+  const [overhead] = poLandedOverheadPerPair(poId);
+  const po = one(`SELECT currency_code FROM purchase_orders WHERE id = ?`, [poId]);
+  const items = [], groups = new Map();
+  for (const box of all(`SELECT * FROM boxes WHERE source_po_id = ?`, [poId])) {
+    const label = box.source_label;
+    if (!groups.has(label)) {
+      const g = one(`SELECT id, received_at, fx_rate_to_usd FROM po_box_groups WHERE po_id = ? AND label = ? LIMIT 1`, [poId, label]);
+      if (g) {
+        const fx = g.fx_rate_to_usd || rateOn(po.currency_code, g.received_at) || 1.0;
+        const lines = new Map(all(`SELECT variant_id, unit_cost FROM po_items WHERE po_box_group_id = ?`, [g.id]).map(r => [r.variant_id, r.unit_cost]));
+        groups.set(label, [fx, lines]);
+      } else groups.set(label, null);
+    }
+    const grp = groups.get(label);
+    if (!grp) continue;
+    const [fx, lines] = grp;
+    for (const it of all(`SELECT * FROM box_items WHERE box_id = ?`, [box.id])) {
+      const base = lines.get(it.variant_id);
+      if (base === undefined || base === null) continue;
+      const target = pyRound(base * fx + overhead, 4);
+      if (box.status === 'open' || box.status === 'emptied') {
+        const left = it.qty_left || 0, gone = it.qty - left;
+        if (gone > 0) {
+          const outCost = val(`SELECT COALESCE(SUM(CASE WHEN kind = 'return' THEN -qty * unit_cost ELSE qty * unit_cost END), 0)
+                               FROM pair_picks WHERE box_id = ? AND variant_id = ?`, [box.id, it.variant_id]);
+          items.push({ id: it.id, box_id: box.id, sold: true, qty: gone, recorded: outCost ? outCost / gone : it.unit_cost, target });
+        }
+        if (left > 0) items.push({ id: it.id, box_id: box.id, sold: false, qty: left, recorded: it.unit_cost, target });
+        continue;
+      }
+      items.push({ id: it.id, box_id: box.id, sold: box.status === 'sold', qty: it.qty, recorded: it.unit_cost, target });
+    }
+  }
+  const sold = items.filter(i => i.sold);
+  let shouldBe = 0;
+  for (const i of sold) shouldBe += (i.target - i.recorded) * i.qty;
+  const posted = val(`SELECT COALESCE(SUM(amount_usd), 0) FROM cogs_adjustments WHERE po_id = ?`, [poId]) || 0;
+  const instock = items.filter(i => !i.sold && Math.abs(i.target - i.recorded) >= 0.00005);
+  let instockChange = 0;
+  for (const i of instock) instockChange += (i.target - i.recorded) * i.qty;
+  return { items, sold_pairs: sold.reduce((s, i) => s + i.qty, 0), should_be: shouldBe, posted, fix: shouldBe - posted,
+    instock_boxes: new Set(instock.map(i => i.box_id)).size, instock_change_usd: instockChange,
+    boxes_in_stock: new Set(items.filter(i => !i.sold).map(i => i.box_id)).size };
+}
+
+// The number shown for an order: imported orders keep theirs (#38); orders made in this app
+// continue the count in the order they were made (#39, #40…).
+export function orderRef(id) {
+  if (typeof id === 'number') return id;
+  return memo('oref|' + id, () => {
+    const base = val(`SELECT COALESCE(MAX(id), 0) FROM orders WHERE typeof(id) = 'integer'`) || 0;
+    const rank = val(`SELECT COUNT(*) FROM orders WHERE typeof(id) = 'text' AND id <= ?`, [id]) || 0;
+    return base + rank;
+  });
+}

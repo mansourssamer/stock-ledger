@@ -65,89 +65,64 @@ function applyChanges(name, changes) {
 }
 
 // ---------- writing ----------
-// const t = tx(); t.insert('orders', {...}); t.update('boxes', 12, {status: 'sold'}); await t.commit();
-// The local copy changes immediately; the upload happens in the background.
-class Tx {
-  constructor() { this.ops = []; }
-  insert(table, row) {
-    const key = row[TABLES[table].key] ?? L.newId();
-    const full = L.withDefaults(table, { ...row, [TABLES[table].key]: key });
-    this.ops.push({ table, key, type: 'set', fields: full });
-    return key;
+// await change(() => { ...SQL on the local copy, as the old app did... })
+// The operation runs synchronously on the device copy and either completes or leaves no
+// trace (an error thrown inside undoes it). Every row it touched is then uploaded in the
+// background, one Firestore write per bucket — Firestore queues them while offline.
+export async function change(fn) {
+  L.begin();
+  let result, touched;
+  try {
+    result = fn();
+    touched = L.commitLocal();
+  } catch (e) {
+    L.rollback();
+    throw e;
   }
-  update(table, key, fields) {
-    this.ops.push({ table, key, type: 'merge', fields });
-    return key;
-  }
-  remove(table, key) {
-    this.ops.push({ table, key, type: 'remove' });
-  }
-  applyLocal() {
-    L.batch(() => this.applyOps());
-  }
-  applyOps() {
-    for (const op of this.ops) {
-      if (op.type === 'remove') L.deleteRow(op.table, op.key);
-      else if (op.type === 'set') L.upsertRow(op.table, op.key, op.fields);
-      else {
-        const cur = L.getRow(op.table, op.key);
-        if (cur) L.upsertRow(op.table, op.key, { ...cur, ...op.fields });
-      }
-    }
-  }
-  async commit() {
-    if (!this.ops.length) return true;
-    this.applyLocal();
-    changed();
-    // One Firestore write per bucket touched, so a sale of 40 boxes is a handful of writes.
-    const groups = new Map();
-    for (const op of this.ops) {
-      const t = TABLES[op.table];
-      const bucket = L.bucketOf(op.table, op.key);
-      const gk = op.table + '/' + bucket;
-      if (!groups.has(gk)) groups.set(gk, { table: op.table, bucket, rows: {} });
-      const rows = groups.get(gk).rows;
-      const k = String(op.key);
-      if (op.type === 'remove') rows[k] = F.deleteField();
-      else {
-        const f = {};
-        for (const [c, v] of Object.entries(op.fields)) if (c !== t.key) f[c] = v === undefined ? null : v;
-        if (op.type === 'set' || !rows[k] || typeof rows[k] !== 'object') rows[k] = f;
-        else Object.assign(rows[k], f);
-      }
-    }
-    const list = [...groups.values()];
-    const commits = [];
-    for (let i = 0; i < list.length; i += 450) {
-      const chunk = list.slice(i, i + 450);
-      const b = F.writeBatch(S.fs);
-      for (const g of chunk) b.set(F.doc(S.fs, g.table, g.bucket), { rows: g.rows, updatedAt: F.serverTimestamp() }, { merge: true });
-      S.pending++;
-      commits.push(b.commit().finally(() => { S.pending--; changed(); }));
-    }
-    try {
-      // Offline, commit() waits until the upload happens: don't hold the screen for it.
-      await Promise.race([Promise.all(commits), new Promise(r => setTimeout(r, 1500))]);
-      Promise.all(commits).catch(e => this.fail(list, e));
-      return true;
-    } catch (e) {
-      await this.fail(list, e);
-      return false;
-    }
-  }
-  async fail(list, e) {
-    // Put back what the server and this device really hold.
-    for (const g of list) {
-      try {
-        const d = await F.getDocFromCache(F.doc(S.fs, g.table, g.bucket));
-        L.replaceBucket(g.table, g.bucket, d.exists() ? (d.data().rows || {}) : {});
-      } catch { L.replaceBucket(g.table, g.bucket, {}); }
-    }
-    changed();
-    S.onError('write', e);
-  }
+  changed();
+  if (S.fs && touched.length) await upload(touched);
+  return result;
 }
-export const tx = () => new Tx();
+
+async function upload(touched) {
+  const groups = new Map();
+  for (const { table, key, row } of touched) {
+    const t = TABLES[table];
+    const bucket = L.bucketOf(table, key);
+    const gk = table + '/' + bucket;
+    if (!groups.has(gk)) groups.set(gk, { table, bucket, rows: {} });
+    if (!row) groups.get(gk).rows[String(key)] = F.deleteField();
+    else {
+      const f = {};
+      for (const [c] of t.cols) if (c !== t.key) f[c] = row[c] === undefined ? null : row[c];
+      groups.get(gk).rows[String(key)] = f;
+    }
+  }
+  const list = [...groups.values()];
+  const commits = [];
+  for (let i = 0; i < list.length; i += 450) {
+    const b = F.writeBatch(S.fs);
+    for (const g of list.slice(i, i + 450)) b.set(F.doc(S.fs, g.table, g.bucket), { rows: g.rows, updatedAt: F.serverTimestamp() }, { merge: true });
+    S.pending++;
+    commits.push(b.commit().finally(() => { S.pending--; changed(); }));
+  }
+  // Offline, commit() only finishes once the upload happens: don't hold the screen for it.
+  const all = Promise.all(commits);
+  all.catch(e => fail(list, e));
+  await Promise.race([all.catch(() => {}), new Promise(r => setTimeout(r, 1200))]);
+}
+
+async function fail(list, e) {
+  // Put back what the server and this device really hold.
+  for (const g of list) {
+    try {
+      const d = await F.getDocFromCache(F.doc(S.fs, g.table, g.bucket));
+      L.batch(() => L.replaceBucket(g.table, g.bucket, d.exists() ? (d.data().rows || {}) : {}));
+    } catch { /* keep what we have */ }
+  }
+  changed();
+  S.onError('write', e);
+}
 
 // ---------- whole-collection operations, used by the importer ----------
 export async function serverBuckets(name) {
@@ -186,6 +161,14 @@ export async function getBlob(coll, id) {
   if (v) imgCache.set(k, v);
   return v;
 }
-export function blobDoc(coll, id, data) {
-  return { coll, id, data };
+// Saves one photo or document (its own document; uploads in the background when offline).
+export async function putBlob(coll, id, data) {
+  imgCache.set(coll + '/' + id, data);
+  if (!S.fs) return;
+  const b = F.writeBatch(S.fs);
+  b.set(F.doc(S.fs, coll, id), { ...data, updatedAt: F.serverTimestamp() });
+  S.pending++;
+  const p = b.commit().finally(() => { S.pending--; changed(); });
+  p.catch(e => S.onError('write', e));
+  await Promise.race([p.catch(() => {}), new Promise(r => setTimeout(r, 1200))]);
 }

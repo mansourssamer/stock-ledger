@@ -339,17 +339,39 @@ textarea.inp{height:auto;min-height:62px;padding:9px 11px;resize:vertical}
 .check{display:flex;gap:8px;align-items:center;margin-top:14px;font-weight:500}
 .tile .v .vsm{font-size:.62em;line-height:1.25;display:block;letter-spacing:0}
 .pimg:empty{display:none}
+.rowacts{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.callout{padding:11px 14px;border-radius:var(--r);border:1px solid var(--line);background:var(--surface)}
+.callout.warn{background:var(--warn-soft);border-color:transparent}
+.callout.bad{background:var(--bad-soft);border-color:transparent}
+.callout.good{background:var(--good-soft);border-color:transparent}
+.toolbar-h{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.mixpick{display:flex;flex-direction:column;gap:2px}
+.doc{background:#fff;color:#1C2530;max-width:760px;margin:0 auto;padding:28px 26px;border-radius:var(--r);border:1px solid var(--line)}
+.doc h1{font-size:22px;margin:0 0 4px}
+.doc .dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;border-bottom:2px solid #1C2530;padding-bottom:16px;margin-bottom:18px}
+.doc .parties{display:flex;justify-content:space-between;gap:12px;margin-bottom:20px}
+.doc .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#666;margin-bottom:4px}
+.doc table{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:13px}
+.doc th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:#666;border-bottom:2px solid #1C2530;padding:7px 5px}
+.doc td{padding:7px 5px;border-bottom:1px solid #DCD6C9;vertical-align:top}
+.doc .r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.doc .tot{max-width:320px;margin-left:auto}
+.doc .tot div{display:flex;justify-content:space-between;padding:3px 0;gap:12px}
+.doc .tot .g{font-weight:700;border-top:1px solid #1C2530;margin-top:6px;padding-top:8px;font-size:15px}
+.docbar{display:flex;gap:8px;justify-content:space-between;align-items:center;max-width:760px;margin:0 auto 12px}
+@media print{body{background:#fff}#root>.app>.rail,.tabbar,.mtop,.docbar,.toast,#modals{display:none!important}.app{display:block}.main{padding:0}.doc{border:0;padding:0;max-width:none}.wrap{max-width:none}}
 .pimg img{max-height:260px;border-radius:var(--r);border:1px solid var(--line);background:var(--surface)}
 .mtop .dot{margin-left:auto}
 .sheet{position:fixed;left:0;right:0;bottom:0;z-index:60;max-height:85vh;overflow-y:auto;background:var(--surface);border-radius:16px 16px 0 0;box-shadow:var(--shadow);padding:10px 14px calc(18px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:14px}
 .sheet-h{display:flex;align-items:center;justify-content:space-between}
 .sheet .rail-foot{margin-top:0}
 .scrim{z-index:55}
-@media print{.app,.tabbar,.toast{display:none!important}}
+
 </style>
 </head>
 <body>
 <div id="root"><div class="gate"><div class="gate-card"><p>Chargement…</p></div></div></div>
+<div id="modals"></div>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <noscript><p style="padding:20px">Cette application a besoin de JavaScript.</p></noscript>
 <script src="vendor/sql-wasm.js"></script>
