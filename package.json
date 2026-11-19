@@ -1,0 +1,10 @@
+{
+  "name": "stock-ledger",
+  "private": true,
+  "type": "module",
+  "description": "Tests only \u2014 the app itself needs no build step.",
+  "devDependencies": {
+    "sql.js": "1.17.0",
+    "playwright": "*"
+  }
+}

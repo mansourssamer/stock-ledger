@@ -1,0 +1,23 @@
+rules_version = '2';
+// Stock & Ledger security rules.
+// Paste this into Firebase console → Firestore Database → Rules, replace OWNER_EMAIL with
+// your Google email in lowercase, then Publish. Only that account can read or change data.
+// (Your email goes only into the Firebase console, never into the public code.)
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function owner() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in ['OWNER_EMAIL'];
+    }
+
+    // Every collection: the tables (rows kept in bucket documents), photos and documents.
+    // Each write must carry the server's time, so other devices can fetch only what changed.
+    match /{coll}/{id} {
+      allow read: if owner();
+      allow create, update: if owner() && request.resource.data.updatedAt == request.time;
+      allow delete: if owner();
+    }
+  }
+}
