@@ -23,9 +23,13 @@ async function readBackup(file) {
   const buf = new Uint8Array(await file.arrayBuffer());
   let dbBytes = null, zip = null;
   if (buf[0] === 0x50 && buf[1] === 0x4b) {           // a .zip
-    zip = await window.JSZip.loadAsync(buf);
-    const e = zip.file('erp.db');
+    const whole = await window.JSZip.loadAsync(buf);
+    // A Mac often unzips the download into a folder; zipped again (Finder → Compress), everything
+    // sits one folder down. So find erp.db wherever it is and read the photos next to it.
+    const e = whole.file('erp.db') || whole.file(/(^|\/)erp\.db$/).find(f => !f.name.startsWith('__MACOSX/'));
     if (!e) throw new Error(t('That file isn’t a Stock & Ledger backup.'));
+    const base = e.name.slice(0, e.name.length - 'erp.db'.length);
+    zip = { file: name => whole.file(base + name) };
     dbBytes = await e.async('uint8array');
   } else dbBytes = buf;
   const head = new TextDecoder().decode(dbBytes.slice(0, 15));
@@ -222,6 +226,7 @@ function render() {
   const out = [header(t('Import your data'), { sub: esc(t('Bring everything from your current Stock & Ledger app: stock, boxes, customers, orders, invoices, payments, purchases, accounts and photos.')) })];
   if (ST.phase === 'idle' || ST.phase === 'error') {
     out.push(panel(t('Choose the backup file'), `<p class="sub">${esc(t('In your current app, open Backup and click “Download a backup now”. Then choose that .zip file here.'))}</p>
+      <p class="sub">${esc(t('On a Mac, if the download turned into a folder, right-click the folder → Compress, then choose the .zip it makes.'))}</p>
       <div class="inline" style="margin-top:12px"><input id="imp-file" type="file" accept=".zip,.db,application/zip"></div>
       ${ST.err ? `<p class="errline">${esc(ST.err)}</p>` : ''}`));
   } else if (ST.phase === 'reading') {

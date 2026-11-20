@@ -114,7 +114,7 @@ const FR = {
   'Preparing the copy… {d} of {n} files': 'Préparation de la copie… {d} fichiers sur {n}', 'Copy saved: {f}': 'Copie enregistrée : {f}',
   'The copy couldn’t be made: {e}': 'La copie n’a pas pu être faite : {e}', 'From now on': 'À partir de maintenant',
   'Enter new sales, payments and purchases only in this app. Keep your old app as it is for a few weeks in case you need to look something up, but don’t enter anything there any more, or the two will no longer agree.': 'Saisissez les nouvelles ventes, paiements et achats uniquement dans cette application. Gardez l’ancienne application telle quelle quelques semaines pour consulter si besoin, mais n’y saisissez plus rien, sinon les deux ne correspondront plus.',
-  'Go to the home page': 'Aller à l’accueil', 'Import another backup': 'Importer une autre sauvegarde',
+  'Go to the home page': 'Aller à l’accueil', 'On a Mac, if the download turned into a folder, right-click the folder → Compress, then choose the .zip it makes.': 'Sur Mac, si le téléchargement est devenu un dossier, faites un clic droit sur le dossier → Compresser, puis choisissez le .zip obtenu.', 'Import another backup': 'Importer une autre sauvegarde',
   'orders': 'commandes', 'order lines': 'lignes de commande', 'box lines': 'lignes de cartons', 'payments': 'paiements', 'customers': 'clients',
   'returns': 'retours', 'returned items': 'articles retournés', 'box contents': 'contenus de cartons', 'purchase order lines': 'lignes de bon de commande',
   'cost lines': 'lignes de frais', 'supplier payments': 'paiements fournisseurs', 'suppliers': 'fournisseurs', 'styles': 'modèles',
