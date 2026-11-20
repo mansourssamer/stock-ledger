@@ -9,7 +9,9 @@ import { importScreen } from './importer.js';
 import { getBlob } from './store.js';
 import { registerActions } from './actions.js';
 import { renderOrder } from './sell.js';
-import { renderDoc } from './docs.js';
+import { renderDoc, mountDoc } from './docs.js';
+import { BUY_SCREENS } from './buy.js';
+import { PLAN_SCREENS } from './plan.js';
 
 const UI = { stockQ: '', custQ: '', orderQ: '', orderStatus: '' };
 const hasData = () => !!val(`SELECT 1 FROM products LIMIT 1`) || !!val(`SELECT 1 FROM customers LIMIT 1`);
@@ -269,9 +271,10 @@ export const SCREENS = {
   orders: { render: orders, mount: () => bindSearch('q-order', 'orderQ') },
   order: { render: renderOrder },
   box: { render: box },
-  doc: { render: (...a) => renderDoc(...a) },
+  doc: { render: (...a) => renderDoc(...a), mount: () => mountDoc() },
   invoices: { render: invoices },
-  purchasing: { render: later(t('Purchasing')) },
+  ...BUY_SCREENS,
+  ...PLAN_SCREENS,
   money: { render: later(t('Money')) },
   reports: { render: later('Rapports') },
   import: importScreen

@@ -59,6 +59,10 @@ for t in tables:
         for c in cols:
             va, vb = norm(ra[c]), norm(tr(t, c, rb[c], rb))
             checked += 1
+            if isinstance(vb, tuple) and vb[0] == 'UNMAPPED' and isinstance(va, int) and va > maxid.get(vb[1], 0) \
+                    and not A.execute(f'SELECT 1 FROM "{vb[1]}" WHERE id = ?', (va,)).fetchone() \
+                    and not B.execute(f'SELECT 1 FROM "{vb[1]}" WHERE id = ?', (vb[2],)).fetchone():
+                continue   # both point at a row made during the run and deleted since (the old app leaves such references too)
             if va != vb and not (isinstance(va, (int, float)) and isinstance(vb, (int, float)) and abs(va - vb) <= 1e-6 * max(1, abs(va))):
                 problems.append(f'{t} #{k}.{c}: old app {ra[c]!r} vs new app {rb[c]!r}')
 print(f'{checked} values compared across {len(tables)} tables, {len(problems)} differences')

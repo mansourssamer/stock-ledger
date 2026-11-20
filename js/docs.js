@@ -4,6 +4,8 @@ import { all, one } from './localdb.js';
 import * as Q from './queries.js';
 import { withLang } from './i18n.js';
 import { esc, fmtMoney, fmtUsd, fmtDate, sum } from './util.js';
+import { getBlob } from './store.js';
+import { priceList } from './buy.js';
 
 const day = s => { const d = String(s || '').slice(0, 10).split('-'); return d.length === 3 ? `${d[2]}/${d[1]}/${d[0]}` : String(s || ''); };
 const STATUS = { paid: 'Payée', partial: 'Partiellement payée', unpaid: 'Impayée', void: 'Annulée', unpriced: 'Sans prix' };
@@ -74,7 +76,32 @@ function statementDoc(customerId) {
     ${s.days_outstanding !== null ? `<p style="color:#666;font-size:12px">La plus ancienne facture impayée date de ${s.days_outstanding} jour(s).</p>` : ''}` : '<p>Aucune opération sur ce compte pour le moment.</p>'}`;
 }
 
+// The price list customers receive (price_list_print.html): priced mixes in stock, with photos.
+function priceListDoc() {
+  const mixes = priceList().filter(m => m.price);
+  if (!mixes.length) return '<p>Aucun prix n’est encore fixé.</p>';
+  return `<div class="dh"><div><h1>Liste de prix</h1><div class="mono">Au ${esc(day(new Date().toISOString()))} · prix par paire · sous réserve de disponibilité</div></div></div>
+    ${mixes.map(m => {
+      const photos = m.styles.filter(st => st.image);
+      return `<div class="plmix"><h2>${esc(m.source_label)}</h2><div class="meta">${esc(m.styles.map(st => st.name + (st.color ? ' — ' + st.color : '')).join(', '))}</div>
+        <table class="facts"><tr><th>Paires par carton</th><th>Pointures</th><th class="r">Cartons disponibles</th></tr>
+          <tr><td class="mono">${m.pairs_per_box}</td><td class="mono">${esc(m.size_run)}</td><td class="mono r">${m.available}</td></tr></table>
+        ${photos.length ? `<div class="photos">${photos.map(st => `<figure><img data-img="${esc(st.image)}" alt="${esc(st.name)}"><figcaption>${esc(st.name)}${st.color ? ' — ' + esc(st.color) : ''}</figcaption></figure>`).join('')}</div>` : ''}
+        <table><thead><tr>${m.tiers.length > 1 ? '<th>Cartons</th>' : ''}<th>Par paire</th><th class="r">Par carton (${m.pairs_per_box} paires)</th></tr></thead><tbody>
+          ${m.tiers.map(tr => `<tr>${m.tiers.length > 1 ? `<td class="mono">${tr.max_boxes ? (tr.max_boxes !== tr.min_boxes ? `${tr.min_boxes} – ${tr.max_boxes}` : tr.min_boxes) : `${tr.min_boxes} et plus`}</td>` : ''}
+            <td class="mono">${esc(fmtMoney(tr.price_per_pair, tr.currency_code))}</td><td class="mono r">${esc(fmtMoney(tr.box_price, tr.currency_code))}</td></tr>`).join('')}</tbody></table></div>`;
+    }).join('')}`;
+}
+// Photos in a document are fetched from their own documents once it is on screen.
+export async function mountDoc() {
+  for (const img of document.querySelectorAll('.doc img[data-img]')) {
+    const d = await getBlob('images', img.dataset.img);
+    if (d && d.data) img.src = d.data; else img.closest('figure')?.remove();
+  }
+}
+
 export function renderDoc(kind, idRaw) {
+  if (kind === 'pricelist') return `<div class="docbar"><a class="backlink" href="#/pricelist">‹ Retour</a><button class="btn primary" onclick="window.print()">Imprimer / PDF</button></div><div class="doc">${withLang('fr', priceListDoc)}</div>`;
   const id = /^\d+$/.test(idRaw) ? Number(idRaw) : idRaw;
   const back = kind === 'invoice' ? `order/${(one(`SELECT order_id FROM invoices WHERE id = ?`, [id]) || {}).order_id}` : `customer/${id}`;
   const body = withLang('fr', () => kind === 'invoice' ? invoiceDoc(id) : statementDoc(id));

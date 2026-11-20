@@ -345,8 +345,8 @@ registerActions({
     openForm({ title: t('Move boxes — {l}', { l: label }),
       intro: esc(here.map(h => `${(locs.find(l => l.id === h.location_id) || {}).name || t('No location')}: ${h.n}`).join(' · ')),
       fields: [
-        { name: 'from_location_id', label: t('From'), type: 'select', options: locs.map(l => [l.id, l.name]) },
-        { name: 'to_location_id', label: t('To'), type: 'select', options: locs.map(l => [l.id, l.name]), value: locs[1].id },
+        { name: 'from_location_id', label: t('From'), type: 'select', options: locs.map(l => [l.id, l.name]), value: a.dataset.from ? id(a.dataset.from) : (here[0] ? here[0].location_id : locs[0].id) },
+        { name: 'to_location_id', label: t('To'), type: 'select', options: locs.map(l => [l.id, l.name]), value: (locs.find(l => String(l.id) !== String(a.dataset.from ?? (here[0] ? here[0].location_id : locs[0].id))) || locs[1]).id },
         { name: 'qty', label: t('Boxes'), type: 'number', value: 1 }, { name: 'note', label: t('Notes'), type: 'text' }
       ],
       run: v => KO.locationMove({ ...v, po_id: po, label, from_location_id: id(v.from_location_id), to_location_id: id(v.to_location_id) }), done: after() });

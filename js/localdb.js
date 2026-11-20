@@ -99,7 +99,11 @@ export function val(sql, params = []) {
   const r = one(sql, params);
   return r ? Object.values(r)[0] : null;
 }
-export function run(sql, params = []) { DB.run(sql, params.map(bindable)); }
+// Anything remembered from the data (queries.js keeps a few figures) is forgotten on every write,
+// so an operation always reads what it has just written.
+let INVALIDATE = () => {};
+export const setInvalidate = f => { INVALIDATE = f; };
+export function run(sql, params = []) { INVALIDATE(); DB.run(sql, params.map(bindable)); }
 export const getRow = (table, key) => one(`SELECT * FROM "${table}" WHERE "${TABLES[table].key}" = ?`, [key]);
 
 // ---------- writing the local copy ----------
@@ -120,6 +124,7 @@ function upsertStmt(table) {
 }
 export function upsertRow(table, key, row) {
   const t = TABLES[table];
+  INVALIDATE();
   upsertStmt(table).run(t.cols.map(([c]) => (c === t.key ? key : cleanValue(row[c]))));
 }
 // Many changes at once go in one SQLite transaction (much faster).
@@ -152,6 +157,7 @@ export function commitLocal() {
 }
 export function rollback() {
   if (!inTx) return;
+  INVALIDATE();
   DB.run('ROLLBACK TO usertx');
   DB.run('RELEASE usertx');
   DB.run('UPDATE _track SET on_ = 0');
@@ -164,10 +170,12 @@ export function ins(table, obj) {
   const row = { ...obj };
   if (t.key === 'id' && (row.id === undefined || row.id === null)) row.id = newId();
   const cols = Object.keys(row).filter(c => row[c] !== undefined);
+  INVALIDATE();
   DB.run(`INSERT INTO "${table}" (${cols.map(c => `"${c}"`).join(',')}) VALUES (${cols.map(() => '?').join(',')})`, cols.map(c => cleanValue(row[c])));
   return row[t.key];
 }
 export function deleteRow(table, key) {
+  INVALIDATE();
   DB.run(`DELETE FROM "${table}" WHERE "${TABLES[table].key}" = ?`, [key]);
 }
 function bucketWhere(table, bucket) {
@@ -180,6 +188,7 @@ function bucketWhere(table, bucket) {
 // Makes the local rows of one bucket exactly what its Firestore document holds.
 export function replaceBucket(table, bucket, rows) {
   const [w, p] = bucketWhere(table, bucket);
+  INVALIDATE();
   DB.run(`DELETE FROM "${table}" WHERE ${w}`, p);
   for (const [k, row] of Object.entries(rows || {})) {
     if (!row || row.deleted) continue;
@@ -187,6 +196,7 @@ export function replaceBucket(table, bucket, rows) {
   }
 }
 export function clearAll() {
+  INVALIDATE();
   for (const name of Object.keys(TABLES)) DB.run(`DELETE FROM "${name}"`);
 }
 

@@ -1,7 +1,7 @@
 // The calculations of the original app (db.py and app.py), ported with the same SQL so
 // that stock, values and balances come out exactly as before. Function names follow the
 // Python ones; each says where it came from.
-import { all, one, val } from './localdb.js';
+import { all, one, val, setInvalidate } from './localdb.js';
 import { pyRound } from './util.js';
 
 export const BASE_CURRENCY = 'USD';
@@ -10,6 +10,7 @@ export const BASE_CURRENCY = 'USD';
 const MEMO = new Map();
 export const clearMemo = () => MEMO.clear();
 const memo = (k, f) => { if (!MEMO.has(k)) MEMO.set(k, f()); return MEMO.get(k); };
+setInvalidate(() => { if (MEMO.size) MEMO.clear(); });
 
 // db.rate_on — USD per unit of a currency on a day (latest rate on or before it; the
 // earliest rate for a day before the first one; null if the currency has no rate).
@@ -462,13 +463,15 @@ export function poCostPlan(poId) {
     boxes_in_stock: new Set(items.filter(i => !i.sold).map(i => i.box_id)).size };
 }
 
-// The number shown for an order: imported orders keep theirs (#38); orders made in this app
-// continue the count in the order they were made (#39, #40…).
-export function orderRef(id) {
+// The number shown for an order or purchase order: imported ones keep theirs (#38); ones made
+// in this app continue the count in the order they were made (#39, #40…).
+function seqRef(table, id) {
   if (typeof id === 'number') return id;
-  return memo('oref|' + id, () => {
-    const base = val(`SELECT COALESCE(MAX(id), 0) FROM orders WHERE typeof(id) = 'integer'`) || 0;
-    const rank = val(`SELECT COUNT(*) FROM orders WHERE typeof(id) = 'text' AND id <= ?`, [id]) || 0;
+  return memo(`ref|${table}|${id}`, () => {
+    const base = val(`SELECT COALESCE(MAX(id), 0) FROM "${table}" WHERE typeof(id) = 'integer'`) || 0;
+    const rank = val(`SELECT COUNT(*) FROM "${table}" WHERE typeof(id) = 'text' AND id <= ?`, [id]) || 0;
     return base + rank;
   });
 }
+export const orderRef = id => seqRef('orders', id);
+export const poRef = id => (id === null || id === undefined ? '' : seqRef('purchase_orders', id));

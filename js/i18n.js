@@ -1,4 +1,5 @@
 import { FR_SELL } from './fr.js';
+import { FR_BUY } from './fr_buy.js';
 // Screens are written in English and shown in French by default. t('Text {n}', {n: 3}).
 // Customer documents (invoices, proformas, statements) are always French.
 let LANG = 'fr';
@@ -101,4 +102,4 @@ const FR = {
   'Firebase writes needed': 'Écritures Firebase nécessaires', 'Free limit per day': 'Limite gratuite par jour',
   'Key figures': 'Chiffres clés', 'Old app': 'Ancienne appli', 'New app': 'Nouvelle appli'
 };
-Object.assign(FR, FR_SELL);
+Object.assign(FR, FR_SELL, FR_BUY);

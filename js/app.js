@@ -52,7 +52,8 @@ export function route() {
   return { name: parts[0] || 'home', args: parts.slice(1) };
 }
 export const go = path => { location.hash = '#/' + path; };
-const sectionOf = name => ({ order: 'orders', customer: 'customers', product: 'stock', mix: 'boxes', box: 'boxes', invoice: 'invoices' }[name] || name);
+const BUY = ['po', 'supplier', 'suppliers', 'shipment', 'shipments', 'location', 'locations', 'unplaced', 'sizeruns', 'pricelist', 'buying', 'events', 'missed'];
+const sectionOf = name => (BUY.includes(name) ? 'purchasing' : { order: 'orders', customer: 'customers', product: 'stock', mix: 'boxes', box: 'boxes', invoice: 'invoices' }[name] || name);
 
 // ---------- rendering ----------
 let renderQueued = false;

@@ -21,7 +21,7 @@ export const empty = (title, text = '', action = '') =>
 export function table(cols, rows, { foot = null, emptyText = '' } = {}) {
   if (!rows.length && emptyText) return `<div class="panel-b">${empty(emptyText)}</div>`;
   const th = cols.map(c => `<th class="${c.n ? 'n ' : ''}${c.cls || ''}">${esc(c.h)}</th>`).join('');
-  const tr = rows.map(r => `<tr class="${r.href ? 'click ' : ''}${r.cls || ''}"${r.href ? ` data-href="${esc(r.href)}"` : ''}>${r.cells.map((v, i) =>
+  const tr = rows.map(r => r.span ? `<tr class="${r.cls || ''}"><td colspan="${cols.length}">${r.cells[0]}</td></tr>` : `<tr class="${r.href ? 'click ' : ''}${r.cls || ''}"${r.href ? ` data-href="${esc(r.href)}"` : ''}>${r.cells.map((v, i) =>
     `<td class="${cols[i] && cols[i].n ? 'n ' : ''}${(cols[i] && cols[i].cls) || ''}">${v}</td>`).join('')}</tr>`).join('');
   const tf = foot ? `<tfoot><tr>${foot.map((v, i) => `<td class="${cols[i] && cols[i].n ? 'n ' : ''}${(cols[i] && cols[i].cls) || ''}">${v}</td>`).join('')}</tr></tfoot>` : '';
   return `<div class="scroll"><table class="tbl"><thead><tr>${th}</tr></thead><tbody>${tr}</tbody>${tf}</table></div>`;

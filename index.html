@@ -228,6 +228,21 @@ textarea.inp{height:auto;min-height:62px;padding:9px 11px;resize:vertical}
 .step .sn{font-family:var(--font-mono);font-size:11px;color:var(--muted)}
 .step.done .sn{color:var(--good)}
 .step b{font-weight:600}
+.steps.ship{grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}.steps.ship .step{cursor:default;padding:9px 10px}.step.cur{outline:2px solid var(--good)}
+@media (max-width:600px){.steps.ship{grid-template-columns:1fr 1fr}}
+.subnav{display:flex;gap:6px;overflow-x:auto;margin:-4px 0 14px;padding-bottom:4px;scrollbar-width:none}.subnav::-webkit-scrollbar{display:none}
+.subnav a{flex:none;display:inline-flex;align-items:center;height:32px;padding:0 13px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);font-weight:550;font-size:13px;color:var(--muted);text-decoration:none;white-space:nowrap}
+.subnav a[aria-current="page"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.mbot{margin-bottom:12px}.tile .v small{font-size:13px;font-weight:500;color:var(--muted)}
+tr.why td{background:var(--sunken);white-space:normal}.whylines{font-size:12.5px;line-height:1.65;max-width:860px}.whylines .n{display:inline-block;width:18px;color:var(--muted);font-family:var(--font-mono)}
+.actions.left{justify-content:flex-start;margin:-4px 0 16px}
+span.chip{display:inline-flex;align-items:center;cursor:default;color:var(--ink)}
+.chip .linkbtn{margin-left:6px;color:var(--muted)}
+.doc .plmix{margin-bottom:26px;page-break-inside:avoid}.doc .plmix h2{font-size:16px;margin:0 0 2px}.doc .meta{color:#666;font-size:12px;margin-bottom:8px}
+.doc .facts th{font-size:10px}.doc .facts td{border-bottom:none}
+.doc .photos{display:flex;gap:12px;flex-wrap:wrap;margin:10px 0 14px}.doc .photos figure{margin:0;width:150px}
+.doc .photos img{width:150px;height:112px;object-fit:contain;background:#fff;border:1px solid #DCD6C9;border-radius:4px;display:block;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.doc .photos figcaption{font-size:11px;color:#666;margin-top:4px}
 @media (max-width:860px){.steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 /* sell */

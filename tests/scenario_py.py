@@ -39,13 +39,25 @@ def res(v):
         key, _, sub = v[1:].partition('.')
         base = names[key]
         if not sub: return base
-        if sub == 'line0': return val("SELECT id FROM order_box_lines WHERE order_id = ? ORDER BY id LIMIT 1", base)
-        if sub == 'item0': return val("SELECT id FROM order_items WHERE order_id = ? AND box_id IS NULL ORDER BY id LIMIT 1", base)
+        if sub == 'line0' and key.startswith('o'): return val("SELECT id FROM order_box_lines WHERE order_id = ? ORDER BY id LIMIT 1", base)
+        if sub == 'item0' and key.startswith('o'): return val("SELECT id FROM order_items WHERE order_id = ? AND box_id IS NULL ORDER BY id LIMIT 1", base)
         if sub == 'inv': return val("SELECT id FROM invoices WHERE order_id = ? AND status != 'void' ORDER BY id LIMIT 1", base)
-        if sub == 'pay_last': return val("SELECT ip.id FROM invoice_payments ip JOIN invoices i ON i.id = ip.invoice_id WHERE i.order_id = ? ORDER BY ip.id DESC LIMIT 1", base)
+        if sub == 'pay_last' and key.startswith('o'): return val("SELECT ip.id FROM invoice_payments ip JOIN invoices i ON i.id = ip.invoice_id WHERE i.order_id = ? ORDER BY ip.id DESC LIMIT 1", base)
+        # purchasing
+        if sub.startswith('group:'): return val("SELECT id FROM po_box_groups WHERE po_id = ? AND label = ?", base, sub[6:])
+        if sub.startswith('item'):
+            return val("SELECT pi.id FROM po_items pi JOIN po_box_groups g ON g.id = pi.po_box_group_id WHERE g.po_id = ? ORDER BY pi.id LIMIT 1 OFFSET ?", base, int(sub[4:]))
+        if sub == 'cost0': return val("SELECT id FROM po_costs WHERE po_id = ? ORDER BY id LIMIT 1", base)
+        if sub == 'cost_last': return val("SELECT id FROM po_costs WHERE po_id = ? ORDER BY id DESC LIMIT 1", base)
+        if sub == 'pay_last': return val("SELECT id FROM cash_transactions WHERE ref_type = 'purchase_order' AND ref_id = ? ORDER BY id DESC LIMIT 1", base)
+        if sub == 'ppay_last': return val("SELECT id FROM partner_ledger WHERE ref_type = 'purchase_order' AND ref_id = ? AND method = 'direct' ORDER BY id DESC LIMIT 1", base)
+        if sub.startswith('tier:'):
+            _, label, n = sub.split(':')
+            return val("SELECT id FROM price_tiers WHERE source_po_id IS ? AND source_label = ? AND min_boxes = ?", base, label, int(n))
+        if sub == 'line0': return val("SELECT id FROM assortment_lines WHERE assortment_id = ? ORDER BY id LIMIT 1", base)
     return v
 
-CHECKBOXES = {'restock', 'credit_ok', 'pay_in_full', 'remove_image', 'confirm'}
+CHECKBOXES = {'restock', 'credit_ok', 'pay_in_full', 'remove_image', 'confirm', 'is_actual', 'archived'}
 def form(args, *keys):
     out = {}
     for k in keys:
@@ -93,10 +105,50 @@ for step in json.load(open(scen_path)):
             it = c.execute("SELECT id, qty_left FROM box_items WHERE box_id = ? AND qty_left > 0 ORDER BY id LIMIT 1", (box,)).fetchone()
         post(f"/boxes/{box}/count", {f"counted_{it['id']}": str(it['qty_left'] - a['missing'])})
     elif op == 'locationMove': post('/locations/move', form(a, 'from_location_id', 'to_location_id', 'po_id', 'label', 'qty', 'note'))
+    # purchasing
+    elif op == 'supplierNew': post('/suppliers/new', form(a, 'name', 'email', 'phone', 'address'))
+    elif op == 'supplierEdit': post(f"/suppliers/{res(a['supplier'])}/edit", form(a, 'name', 'email', 'phone', 'address'))
+    elif op == 'supplierDelete': post(f"/suppliers/{res(a['supplier'])}/delete", {})
+    elif op == 'poNew': post('/purchase-orders/new', form(a, 'supplier_id', 'notes', 'currency_code'))
+    elif op == 'poEdit': post(f"/purchase-orders/{res(a['po'])}/edit", form(a, 'supplier_id', 'notes', 'currency_code'))
+    elif op == 'poDelete': post(f"/purchase-orders/{res(a['po'])}/delete", {})
+    elif op == 'poAddItem': post(f"/purchase-orders/{res(a['po'])}/add_item", form(a, 'variant_id', 'qty', 'box_label', 'unit_cost'))
+    elif op == 'poItemEdit': post(f"/purchase-orders/{res(a['po'])}/items/{res(a['item'])}/edit", form(a, 'qty', 'unit_cost'))
+    elif op == 'poItemDelete': post(f"/purchase-orders/{res(a['po'])}/items/{res(a['item'])}/delete", {})
+    elif op == 'poGroupDelete': post(f"/purchase-orders/{res(a['po'])}/box-groups/{res(a['group'])}/delete", {})
+    elif op == 'poSetBoxCount': post(f"/purchase-orders/{res(a['po'])}/box-groups/{res(a['group'])}/set_count", form(a, 'box_count') if a.get('box_count') != 0 else {'box_count': '0'})
+    elif op == 'poTypeRun': post(f"/purchase-orders/{res(a['po'])}/type-run", form(a, 'product_id', 'color', 'box_label', 'unit_cost', 'run'))
+    elif op == 'poApplyRun': post(f"/purchase-orders/{res(a['po'])}/apply-run", form(a, 'assortment_id', 'product_id', 'color', 'box_label', 'unit_cost'))
+    elif op == 'poSaveRun': post(f"/purchase-orders/{res(a['po'])}/box-groups/{res(a['group'])}/save-run", form(a, 'name'))
+    elif op == 'assortmentNew': post('/assortments/new', form(a, 'name', 'notes', 'run'))
+    elif op == 'assortmentLineAdd': post(f"/assortments/{res(a['assortment'])}/lines/add", form(a, 'size', 'qty'))
+    elif op == 'assortmentLineDelete': post(f"/assortments/{res(a['assortment'])}/lines/{res(a['line'])}/delete", {})
+    elif op == 'assortmentDelete': post(f"/assortments/{res(a['assortment'])}/delete", {})
+    elif op == 'poCostNew': post(f"/purchase-orders/{res(a['po'])}/costs/new", form(a, 'description', 'amount', 'currency_code', 'cost_date', 'is_actual'))
+    elif op == 'poCostEdit': post(f"/purchase-orders/{res(a['po'])}/costs/{res(a['cost'])}/edit", form(a, 'description', 'amount', 'currency_code', 'cost_date', 'is_actual'))
+    elif op == 'poCostDelete': post(f"/purchase-orders/{res(a['po'])}/costs/{res(a['cost'])}/delete", {})
+    elif op == 'poPay': post(f"/purchase-orders/{res(a['po'])}/pay", form(a, 'paid_from', 'amount', 'occurred_on', 'note', 'direct_currency', 'settled_amount', 'settled_currency') if a.get('amount') != 0 else {**form(a, 'paid_from'), 'amount': '0'})
+    elif op == 'poPaymentDelete': post(f"/purchase-orders/{res(a['po'])}/payments/{a['kind']}/{res(a['entry'])}/delete", {})
+    elif op == 'poReceive': post(f"/purchase-orders/{res(a['po'])}/receive", form(a, 'location_id'))
+    elif op == 'poGroupReceive': post(f"/purchase-orders/{res(a['po'])}/box-groups/{res(a['group'])}/receive", form(a, 'location_id'))
+    elif op == 'poGroupUnreceive': post(f"/purchase-orders/{res(a['po'])}/box-groups/{res(a['group'])}/unreceive", {})
+    elif op == 'shipmentNew': post('/shipments/new', form(a, 'reference', 'container_no', 'bl_number', 'vessel', 'eta', 'notes'))
+    elif op == 'shipmentEdit': post(f"/shipments/{res(a['shipment'])}/edit", form(a, 'reference', 'container_no', 'bl_number', 'vessel', 'eta', 'notes'))
+    elif op == 'shipmentStage': post(f"/shipments/{res(a['shipment'])}/stage", form(a, 'status', 'when'))
+    elif op == 'shipmentAssign': post(f"/shipments/{res(a['shipment'])}/assign", {'group_id': str(res(a['group']))})
+    elif op == 'shipmentUnassign': post(f"/shipments/{res(a['shipment'])}/unassign", {'group_id': str(res(a['group']))})
+    elif op == 'shipmentReceive': post(f"/shipments/{res(a['shipment'])}/receive", form(a, 'location_id'))
+    elif op == 'locationNew': post('/locations/new', form(a, 'name', 'kind', 'parent_id', 'notes'))
+    elif op == 'locationEdit': post(f"/locations/{res(a['location'])}/edit", form(a, 'name', 'kind', 'parent_id', 'notes', 'archived'))
+    elif op == 'locationsPlace': post('/locations/place', form(a, 'to_location_id', 'label', 'po_id'))
+    elif op == 'priceTierSet': post('/price-list/tiers/new', form(a, 'po_id', 'label', 'price_per_pair', 'min_boxes', 'currency_code', 'notes'))
+    elif op == 'priceTierDelete': post(f"/price-list/tiers/{res(a['tier'])}/delete", {})
     else: raise SystemExit('unknown op ' + op)
     changed = checksum() != before
     if step.get('save'):
-        table = {'c': 'customers', 'p': 'products', 'v': 'variants', 'o': 'orders'}[step['save'][0]]
+        import re as _re
+        table = {'c': 'customers', 'p': 'products', 'v': 'variants', 'o': 'orders', 'sup': 'suppliers', 'po': 'purchase_orders',
+                 'as': 'assortments', 'loc': 'locations', 'sh': 'shipments'}[_re.match('[a-z]+', step['save']).group(0)]
         names[step['save']] = val(f'SELECT MAX(id) FROM "{table}"')
     log.append({'op': op, 'ok': changed})
 # The app keeps recent changes in a WAL file: copy through SQLite so they're included.

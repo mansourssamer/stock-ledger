@@ -8,6 +8,7 @@ const L = await import('../js/localdb.js');
 const { TABLES } = await import('../js/schema.js');
 const S = await import('../js/ops/sales.js');
 const K = await import('../js/ops/stock.js');
+const P = await import('../js/ops/purchasing.js');
 await L.openLocal(require('sql.js'), require.resolve('sql.js/dist/sql-wasm.wasm'));
 const [, , dbIn, scenPath, dbOut] = process.argv;
 const src = L.openBytes(fs.readFileSync(dbIn));
@@ -30,10 +31,19 @@ function res(v) {
     const [key, sub] = v.slice(1).split('.');
     const base = names[key];
     if (!sub) return base;
-    if (sub === 'line0') return val(`SELECT id FROM order_box_lines WHERE order_id = ? ORDER BY id LIMIT 1`, [base]);
-    if (sub === 'item0') return val(`SELECT id FROM order_items WHERE order_id = ? AND box_id IS NULL ORDER BY id LIMIT 1`, [base]);
+    if (sub === 'line0' && key.startsWith('o')) return val(`SELECT id FROM order_box_lines WHERE order_id = ? ORDER BY id LIMIT 1`, [base]);
+    if (sub === 'item0' && key.startsWith('o')) return val(`SELECT id FROM order_items WHERE order_id = ? AND box_id IS NULL ORDER BY id LIMIT 1`, [base]);
     if (sub === 'inv') return val(`SELECT id FROM invoices WHERE order_id = ? AND status != 'void' ORDER BY id LIMIT 1`, [base]);
-    if (sub === 'pay_last') return val(`SELECT ip.id FROM invoice_payments ip JOIN invoices i ON i.id = ip.invoice_id WHERE i.order_id = ? ORDER BY ip.id DESC LIMIT 1`, [base]);
+    if (sub === 'pay_last' && key.startsWith('o')) return val(`SELECT ip.id FROM invoice_payments ip JOIN invoices i ON i.id = ip.invoice_id WHERE i.order_id = ? ORDER BY ip.id DESC LIMIT 1`, [base]);
+    // purchasing
+    if (sub.startsWith('group:')) return val(`SELECT id FROM po_box_groups WHERE po_id = ? AND label = ?`, [base, sub.slice(6)]);
+    if (sub.startsWith('item')) return val(`SELECT pi.id FROM po_items pi JOIN po_box_groups g ON g.id = pi.po_box_group_id WHERE g.po_id = ? ORDER BY pi.id LIMIT 1 OFFSET ?`, [base, Number(sub.slice(4))]);
+    if (sub === 'cost0') return val(`SELECT id FROM po_costs WHERE po_id = ? ORDER BY id LIMIT 1`, [base]);
+    if (sub === 'cost_last') return val(`SELECT id FROM po_costs WHERE po_id = ? ORDER BY id DESC LIMIT 1`, [base]);
+    if (sub === 'pay_last') return val(`SELECT id FROM cash_transactions WHERE ref_type = 'purchase_order' AND ref_id = ? ORDER BY id DESC LIMIT 1`, [base]);
+    if (sub === 'ppay_last') return val(`SELECT id FROM partner_ledger WHERE ref_type = 'purchase_order' AND ref_id = ? AND method = 'direct' ORDER BY id DESC LIMIT 1`, [base]);
+    if (sub.startsWith('tier:')) { const [, label, n] = sub.split(':'); return val(`SELECT id FROM price_tiers WHERE source_po_id IS ? AND source_label = ? AND min_boxes = ?`, [base, label, Number(n)]); }
+    if (sub === 'line0') return val(`SELECT id FROM assortment_lines WHERE assortment_id = ? ORDER BY id LIMIT 1`, [base]);
   }
   return v;
 }
@@ -76,6 +86,44 @@ for (const step of JSON.parse(fs.readFileSync(scenPath))) {
         K.boxCount(box, { [it.id]: String(it.qty_left - a.missing) }); break;
       }
       case 'locationMove': K.locationMove(a); break;
+      // purchasing
+      case 'supplierNew': P.supplierNew(a); break;
+      case 'supplierEdit': P.supplierEdit(a.supplier, a); break;
+      case 'supplierDelete': P.supplierDelete(a.supplier); break;
+      case 'poNew': P.poNew(a); break;
+      case 'poEdit': P.poEdit(a.po, a); break;
+      case 'poDelete': P.poDelete(a.po); break;
+      case 'poAddItem': P.poAddItem(a.po, a); break;
+      case 'poItemEdit': P.poItemEdit(a.po, a.item, a); break;
+      case 'poItemDelete': P.poItemDelete(a.po, a.item); break;
+      case 'poGroupDelete': P.poGroupDelete(a.po, a.group); break;
+      case 'poSetBoxCount': P.poSetBoxCount(a.po, a.group, a); break;
+      case 'poTypeRun': P.poTypeRun(a.po, a); break;
+      case 'poApplyRun': P.poApplyRun(a.po, a); break;
+      case 'poSaveRun': P.poSaveRun(a.po, a.group, a); break;
+      case 'assortmentNew': P.assortmentNew(a); break;
+      case 'assortmentLineAdd': P.assortmentLineAdd(a.assortment, a); break;
+      case 'assortmentLineDelete': P.assortmentLineDelete(a.assortment, a.line); break;
+      case 'assortmentDelete': P.assortmentDelete(a.assortment); break;
+      case 'poCostNew': P.poCostNew(a.po, a); break;
+      case 'poCostEdit': P.poCostEdit(a.po, a.cost, a); break;
+      case 'poCostDelete': P.poCostDelete(a.po, a.cost); break;
+      case 'poPay': P.poPay(a.po, a); break;
+      case 'poPaymentDelete': P.poPaymentDelete(a.po, a.kind, a.entry); break;
+      case 'poReceive': P.poReceive(a.po, a); break;
+      case 'poGroupReceive': P.poGroupReceive(a.po, a.group, a); break;
+      case 'poGroupUnreceive': P.poGroupUnreceive(a.po, a.group); break;
+      case 'shipmentNew': P.shipmentNew(a); break;
+      case 'shipmentEdit': P.shipmentEdit(a.shipment, a); break;
+      case 'shipmentStage': P.shipmentStage(a.shipment, a); break;
+      case 'shipmentAssign': P.shipmentAssign(a.shipment, a.group); break;
+      case 'shipmentUnassign': P.shipmentUnassign(a.shipment, a.group); break;
+      case 'shipmentReceive': P.shipmentReceive(a.shipment, a); break;
+      case 'locationNew': P.locationNew(a); break;
+      case 'locationEdit': P.locationEdit(a.location, a); break;
+      case 'locationsPlace': P.locationsPlace(a); break;
+      case 'priceTierSet': P.priceTierSet(a); break;
+      case 'priceTierDelete': P.priceTierDelete(a.tier); break;
       default: throw new Error('unknown op ' + step.op);
     }
     const touched = L.commitLocal();
@@ -85,7 +133,11 @@ for (const step of JSON.parse(fs.readFileSync(scenPath))) {
     if (!e.user) { console.error(step.op, e); process.exit(2); }
     ok = false; err = e.message;
   }
-  if (step.save) names[step.save] = result;
+  if (step.save) {
+    const table = { c: 'customers', p: 'products', v: 'variants', o: 'orders', sup: 'suppliers', po: 'purchase_orders', as: 'assortments', loc: 'locations', sh: 'shipments' }[step.save.match(/^[a-z]+/)[0]];
+    names[step.save] = val(`SELECT id FROM "${table}" ORDER BY id DESC LIMIT 1`);
+    void result;
+  }
   log.push({ op: step.op, ok, ...(err ? { why: err } : {}) });
 }
 fs.writeFileSync(dbOut, L.exportBytes());

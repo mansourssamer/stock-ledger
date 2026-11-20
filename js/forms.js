@@ -22,7 +22,7 @@ function fieldHtml(f, vals) {
       `<option value="${esc(ov)}"${String(ov) === String(v) ? ' selected' : ''}>${esc(ol)}</option>`).join('')}</select>${hint}</div>`;
     case 'textarea': return `<div class="field full">${lab}<textarea id="${id}" name="${f.name}" class="inp" rows="2">${esc(v)}</textarea>${hint}</div>`;
     case 'checkbox': return `<label class="check full"><input type="checkbox" id="${id}" name="${f.name}"${v ? ' checked' : ''}> ${esc(f.label)}</label>${hint ? `<div class="full">${hint}</div>` : ''}`;
-    case 'date': return `<div class="field${cls}">${lab}<input id="${id}" name="${f.name}" class="inp" type="date" value="${esc(v || '')}" max="${today()}">${hint}</div>`;
+    case 'date': return `<div class="field${cls}">${lab}<input id="${id}" name="${f.name}" class="inp" type="date" value="${esc(v || '')}"${f.future ? '' : ` max="${today()}"`}>${hint}</div>`;
     case 'file': return `<div class="field full">${lab}<input id="${id}" name="${f.name}" type="file" accept="${esc(f.accept || '')}">${hint}</div>`;
     case 'number': case 'money': return `<div class="field${cls}">${lab}<input id="${id}" name="${f.name}" class="inp n" inputmode="decimal" autocomplete="off" value="${esc(v)}" placeholder="${esc(f.placeholder || '')}">${hint}</div>`;
     default: return `<div class="field${cls}">${lab}<input id="${id}" name="${f.name}" class="inp" type="${f.type || 'text'}" autocomplete="off" value="${esc(v)}" placeholder="${esc(f.placeholder || '')}">${hint}</div>`;

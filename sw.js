@@ -1,7 +1,7 @@
 // Keeps the app's own files on the device so it opens with no internet. Data never passes
 // through here: Firestore keeps its own offline copy. CACHE is set by tools/stamp_sw.py.
-const CACHE = 'stock-ledger-ecead8c1ca';
-const SHELL = ['./', './index.html', './config.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './vendor/firebase.js', './vendor/sql-wasm.js', './vendor/sql-wasm.wasm', './vendor/jszip.min.js', './js/actions.js', './js/app.js', './js/docs.js', './js/fb.js', './js/forms.js', './js/fr.js', './js/i18n.js', './js/images.js', './js/importer.js', './js/localdb.js', './js/queries.js', './js/schema.js', './js/screens.js', './js/sell.js', './js/store.js', './js/ui.js', './js/util.js'];
+const CACHE = 'stock-ledger-315a59c452';
+const SHELL = ['./', './index.html', './config.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './vendor/firebase.js', './vendor/sql-wasm.js', './vendor/sql-wasm.wasm', './vendor/jszip.min.js', './js/actions.js', './js/app.js', './js/buy.js', './js/buying.js', './js/docs.js', './js/fb.js', './js/forms.js', './js/fr.js', './js/fr_buy.js', './js/i18n.js', './js/images.js', './js/importer.js', './js/localdb.js', './js/ops/common.js', './js/ops/costs.js', './js/ops/money.js', './js/ops/purchasing.js', './js/ops/sales.js', './js/ops/stock.js', './js/plan.js', './js/queries.js', './js/schema.js', './js/screens.js', './js/sell.js', './js/store.js', './js/ui.js', './js/util.js'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
