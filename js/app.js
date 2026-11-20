@@ -42,7 +42,7 @@ export const UI = { menuOpen: false, gate: { email: '', password: '', err: '', b
 const NAV = () => [
   { group: t('Daily'), items: [['home', t('Home'), 'home'], ['orders', t('Sales'), 'receipt'], ['customers', t('Customers'), 'users']] },
   { group: t('Goods'), items: [['stock', t('Stock'), 'shoe'], ['boxes', t('Inventory'), 'box'], ['purchasing', t('Purchasing'), 'truck']] },
-  { group: t('Money'), items: [['invoices', t('Invoices'), 'receipt'], ['money', t('Money'), 'wallet'], ['reports', 'Rapports', 'chart']] },
+  { group: t('Money'), items: [['invoices', t('Invoices'), 'receipt'], ['money', t('Money'), 'wallet'], ['reports', t('Reports'), 'chart']] },
   { group: t('More'), items: [['import', t('Import data'), 'upload']] }
 ];
 const TABS = () => [['home', t('Home'), 'home'], ['orders', t('Sales'), 'receipt'], ['stock', t('Stock'), 'shoe'], ['customers', t('Customers'), 'users'], ['more', t('More'), 'dots']];
@@ -53,7 +53,8 @@ export function route() {
 }
 export const go = path => { location.hash = '#/' + path; };
 const BUY = ['po', 'supplier', 'suppliers', 'shipment', 'shipments', 'location', 'locations', 'unplaced', 'sizeruns', 'pricelist', 'buying', 'events', 'missed'];
-const sectionOf = name => (BUY.includes(name) ? 'purchasing' : { order: 'orders', customer: 'customers', product: 'stock', mix: 'boxes', box: 'boxes', invoice: 'invoices' }[name] || name);
+const MONEY = ['account', 'expenses', 'partners', 'partner', 'currencies'], REPORTS = ['pnl', 'cashflow', 'costing', 'balance', 'daily', 'sales', 'monthly'];
+const sectionOf = name => (BUY.includes(name) ? 'purchasing' : MONEY.includes(name) ? 'money' : REPORTS.includes(name) ? 'reports' : { order: 'orders', customer: 'customers', product: 'stock', mix: 'boxes', box: 'boxes', invoice: 'invoices' }[name] || name);
 
 // ---------- rendering ----------
 let renderQueued = false;

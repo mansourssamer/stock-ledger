@@ -25,6 +25,13 @@ function serve() {
   });
 }
 let n = 0;
+// Every app file must be in the service worker's list (run tools/stamp_sw.py before publishing).
+{
+  const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
+  const walk = d => fs.readdirSync(d).flatMap(f => { const p = path.join(d, f); return fs.statSync(p).isDirectory() ? walk(p) : p.endsWith('.js') ? [path.relative(ROOT, p)] : []; });
+  const missing = walk(path.join(ROOT, 'js')).filter(f => !sw.includes(`'./${f}'`));
+  if (missing.length) { console.error('Not kept for offline use (run tools/stamp_sw.py):', missing.join(', ')); process.exit(1); }
+}
 (async () => {
   fs.mkdirSync(outDir, { recursive: true });
   const srv = await serve();

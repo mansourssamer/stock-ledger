@@ -15,8 +15,8 @@ REF = {'customer_id': 'customers', 'order_id': 'orders', 'sold_order_id': 'order
        'po_box_group_id': 'po_box_groups', 'shipment_id': 'shipments', 'location_id': 'locations', 'from_location_id': 'locations',
        'to_location_id': 'locations', 'parent_id': 'locations', 'supplier_id': 'suppliers', 'partner_id': 'partners',
        'cash_transaction_id': 'cash_transactions', 'distribution_id': 'distributions', 'contact_id': 'crm_contacts', 'zone_id': 'crm_zones',
-       'assortment_id': 'assortments'}
-REFTYPE = {'order': 'orders', 'purchase_order': 'purchase_orders', 'invoice_payment': 'invoice_payments', 'box_count': 'boxes', 'expense': 'expenses',
+       'assortment_id': 'assortments', 'distribution_id': 'distributions'}
+REFTYPE = {'partner': 'partners', 'order': 'orders', 'purchase_order': 'purchase_orders', 'invoice_payment': 'invoice_payments', 'box_count': 'boxes', 'expense': 'expenses',
            'po_cost': 'po_costs', 'partner_ledger': 'partner_ledger', 'distribution': 'distributions'}
 ts = re.compile(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$')
 maxid = {}
@@ -32,8 +32,13 @@ for t in maxid:
     b_new = [r[0] for r in B.execute(f'SELECT id FROM "{t}" WHERE typeof(id) = \'text\' ORDER BY id')]
     if len(a_new) != len(b_new): problems.append(f'{t}: {len(a_new)} new rows in old app, {len(b_new)} in new app')
     for x, y in zip(a_new, b_new): idmap[(t, y)] = x
+# Transfers are tagged with a random group: match the new ones by the order they were made.
+tg_old = [r[0] for r in A.execute("SELECT transfer_group FROM cash_transactions WHERE transfer_group IS NOT NULL AND id > ? GROUP BY transfer_group ORDER BY MIN(id)", (maxid.get('cash_transactions', 0),))]
+tg_new = [r[0] for r in B.execute("SELECT transfer_group FROM cash_transactions WHERE transfer_group IS NOT NULL AND typeof(id) = 'text' GROUP BY transfer_group ORDER BY MIN(id)")]
+tgmap = dict(zip(tg_new, tg_old))
 def tr(table, col, v, row):
     if v is None: return None
+    if col == 'transfer_group': return tgmap.get(v, v)
     ref = REF.get(col)
     if col == 'ref_id': ref = REFTYPE.get(row['ref_type'])
     if col == 'id': ref = table

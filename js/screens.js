@@ -12,6 +12,8 @@ import { renderOrder } from './sell.js';
 import { renderDoc, mountDoc } from './docs.js';
 import { BUY_SCREENS } from './buy.js';
 import { PLAN_SCREENS } from './plan.js';
+import { MONEY_SCREENS } from './moneypages.js';
+import { REPORT_SCREENS } from './reportpages.js';
 
 const UI = { stockQ: '', custQ: '', orderQ: '', orderStatus: '' };
 const hasData = () => !!val(`SELECT 1 FROM products LIMIT 1`) || !!val(`SELECT 1 FROM customers LIMIT 1`);
@@ -275,8 +277,8 @@ export const SCREENS = {
   invoices: { render: invoices },
   ...BUY_SCREENS,
   ...PLAN_SCREENS,
-  money: { render: later(t('Money')) },
-  reports: { render: later('Rapports') },
+  ...MONEY_SCREENS,
+  ...REPORT_SCREENS,
   import: importScreen
 };
 

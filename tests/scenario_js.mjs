@@ -9,6 +9,7 @@ const { TABLES } = await import('../js/schema.js');
 const S = await import('../js/ops/sales.js');
 const K = await import('../js/ops/stock.js');
 const P = await import('../js/ops/purchasing.js');
+const F = await import('../js/ops/finance.js');
 await L.openLocal(require('sql.js'), require.resolve('sql.js/dist/sql-wasm.wasm'));
 const [, , dbIn, scenPath, dbOut] = process.argv;
 const src = L.openBytes(fs.readFileSync(dbIn));
@@ -44,13 +45,16 @@ function res(v) {
     if (sub === 'ppay_last') return val(`SELECT id FROM partner_ledger WHERE ref_type = 'purchase_order' AND ref_id = ? AND method = 'direct' ORDER BY id DESC LIMIT 1`, [base]);
     if (sub.startsWith('tier:')) { const [, label, n] = sub.split(':'); return val(`SELECT id FROM price_tiers WHERE source_po_id IS ? AND source_label = ? AND min_boxes = ?`, [base, label, Number(n)]); }
     if (sub === 'line0') return val(`SELECT id FROM assortment_lines WHERE assortment_id = ? ORDER BY id LIMIT 1`, [base]);
+    if (sub === 'tg_last') return val(`SELECT transfer_group FROM cash_transactions WHERE account_id = ? AND transfer_group IS NOT NULL ORDER BY id DESC LIMIT 1`, [base]);
+    if (sub === 'entry_last') return val(`SELECT id FROM partner_ledger WHERE partner_id = ? ORDER BY id DESC LIMIT 1`, [base]);
   }
+  if (typeof v === 'string' && v.includes('$')) { const i = v.indexOf('$'); const r = res(v.slice(i)); return r === null || r === undefined ? null : v.slice(0, i) + r; }
   return v;
 }
 const R = a => Object.fromEntries(Object.entries(a).map(([k, v]) => [k, res(v)]));
 const log = [];
 for (const step of JSON.parse(fs.readFileSync(scenPath))) {
-  if (Object.values(step.args).some(v => typeof v === 'string' && v.startsWith('$') && (res(v) === null || res(v) === undefined))) {
+  if (Object.values(step.args).some(v => typeof v === 'string' && v.includes('$') && (res(v) === null || res(v) === undefined))) {
     log.push({ op: step.op, ok: false, skipped: true }); continue;
   }
   const a = R(step.args);
@@ -124,6 +128,28 @@ for (const step of JSON.parse(fs.readFileSync(scenPath))) {
       case 'locationsPlace': P.locationsPlace(a); break;
       case 'priceTierSet': P.priceTierSet(a); break;
       case 'priceTierDelete': P.priceTierDelete(a.tier); break;
+      // money
+      case 'currencyNew': F.currencyNew(a); break;
+      case 'rateNew': F.rateNew(a); break;
+      case 'rateEdit': F.rateEdit(a.rate, { ...a, rate: a.rate_value }); break;
+      case 'rateDelete': F.rateDelete(a.rate); break;
+      case 'accountNew': F.accountNew(a); break;
+      case 'accountEdit': F.accountEdit(a.account, a); break;
+      case 'accountAdjust': F.accountAdjust(a.account, a); break;
+      case 'accountTransfer': F.accountTransfer(a); break;
+      case 'transferDelete': F.transferDelete(a.group); break;
+      case 'partnerNew': F.partnerNew(a); break;
+      case 'partnerEdit': F.partnerEdit(a.partner, a); break;
+      case 'partnerDelete': F.partnerDelete(a.partner); break;
+      case 'partnerLoan': F.partnerLoan(a.partner, a); break;
+      case 'partnerRepay': F.partnerRepay(a.partner, a); break;
+      case 'partnerEntryDelete': F.partnerEntryDelete(a.entry); break;
+      case 'distribute': F.distribute(a); break;
+      case 'distributionDelete': F.distributionDelete(a.distribution); break;
+      case 'expenseNew': F.expenseNew(a); break;
+      case 'expenseEdit': F.expenseEdit(a.expense, { ...a, paid_from: a.paid_from ?? '' }); break;
+      case 'expenseDelete': F.expenseDelete(a.expense); break;
+      case 'costCorrectionsFix': F.costCorrectionsFix(); break;
       default: throw new Error('unknown op ' + step.op);
     }
     const touched = L.commitLocal();
@@ -134,7 +160,7 @@ for (const step of JSON.parse(fs.readFileSync(scenPath))) {
     ok = false; err = e.message;
   }
   if (step.save) {
-    const table = { c: 'customers', p: 'products', v: 'variants', o: 'orders', sup: 'suppliers', po: 'purchase_orders', as: 'assortments', loc: 'locations', sh: 'shipments' }[step.save.match(/^[a-z]+/)[0]];
+    const table = { c: 'customers', p: 'products', v: 'variants', o: 'orders', sup: 'suppliers', po: 'purchase_orders', as: 'assortments', loc: 'locations', sh: 'shipments', acc: 'cash_accounts', pt: 'partners', rt: 'exchange_rates', ex: 'expenses', dist: 'distributions' }[step.save.match(/^[a-z]+/)[0]];
     names[step.save] = val(`SELECT id FROM "${table}" ORDER BY id DESC LIMIT 1`);
     void result;
   }

@@ -55,9 +55,15 @@ def res(v):
             _, label, n = sub.split(':')
             return val("SELECT id FROM price_tiers WHERE source_po_id IS ? AND source_label = ? AND min_boxes = ?", base, label, int(n))
         if sub == 'line0': return val("SELECT id FROM assortment_lines WHERE assortment_id = ? ORDER BY id LIMIT 1", base)
+        if sub == 'tg_last': return val("SELECT transfer_group FROM cash_transactions WHERE account_id = ? AND transfer_group IS NOT NULL ORDER BY id DESC LIMIT 1", base)
+        if sub == 'entry_last': return val("SELECT id FROM partner_ledger WHERE partner_id = ? ORDER BY id DESC LIMIT 1", base)
+    if isinstance(v, str) and '$' in v:
+        pre, _, ref = v.partition('$')
+        r = res('$' + ref)
+        return None if r is None else f"{pre}{r}"
     return v
 
-CHECKBOXES = {'restock', 'credit_ok', 'pay_in_full', 'remove_image', 'confirm', 'is_actual', 'archived'}
+CHECKBOXES = {'restock', 'credit_ok', 'pay_in_full', 'remove_image', 'confirm', 'is_actual', 'archived', 'restamp', 'override'}
 def form(args, *keys):
     out = {}
     for k in keys:
@@ -74,7 +80,7 @@ def post(url, data):
 log = []
 for step in json.load(open(scen_path)):
     op, a = step['op'], step['args']
-    if any(isinstance(v, str) and v.startswith('$') and res(v) is None for v in a.values()):
+    if any(isinstance(v, str) and '$' in v and res(v) is None for v in a.values()):
         log.append({'op': op, 'ok': False, 'skipped': True}); continue   # it refers to something an earlier step didn't make
     before = checksum()
     if op == 'customerNew': post('/customers/new', form(a, 'name', 'email', 'phone', 'address', 'discount_percent', 'credit_limit', 'credit_currency'))
@@ -143,12 +149,35 @@ for step in json.load(open(scen_path)):
     elif op == 'locationsPlace': post('/locations/place', form(a, 'to_location_id', 'label', 'po_id'))
     elif op == 'priceTierSet': post('/price-list/tiers/new', form(a, 'po_id', 'label', 'price_per_pair', 'min_boxes', 'currency_code', 'notes'))
     elif op == 'priceTierDelete': post(f"/price-list/tiers/{res(a['tier'])}/delete", {})
+    # money
+    elif op == 'currencyNew': post('/currencies/new', form(a, 'code', 'name', 'symbol', 'decimals'))
+    elif op == 'rateNew': post('/currencies/rates/new', form(a, 'currency_code', 'effective_from', 'direction', 'rate', 'note'))
+    elif op == 'rateEdit': post(f"/currencies/rates/{res(a['rate'])}/edit", {**form(a, 'direction', 'effective_from', 'note', 'restamp'), 'rate': str(a['rate_value'])})
+    elif op == 'rateDelete': post(f"/currencies/rates/{res(a['rate'])}/delete", {})
+    elif op == 'accountNew': post('/accounts/new', form(a, 'name', 'account_type', 'currency_code', 'opening_balance', 'notes'))
+    elif op == 'accountEdit': post(f"/accounts/{res(a['account'])}/edit", form(a, 'name', 'account_type', 'currency_code', 'opening_balance', 'notes', 'archived'))
+    elif op == 'accountAdjust': post(f"/accounts/{res(a['account'])}/adjust", {**form(a, 'occurred_on', 'description'), 'amount': str(a['amount'])})
+    elif op == 'accountTransfer': post('/accounts/transfer', {**form(a, 'from_account_id', 'to_account_id', 'occurred_on', 'description', 'received_amount'), 'amount': str(a['amount'])})
+    elif op == 'transferDelete': post(f"/accounts/transfers/{res(a['group'])}/delete", {})
+    elif op == 'partnerNew': post('/partners/new', form(a, 'name', 'ownership_percent', 'email', 'phone', 'notes'))
+    elif op == 'partnerEdit': post(f"/partners/{res(a['partner'])}/edit", form(a, 'name', 'ownership_percent', 'email', 'phone', 'notes', 'archived'))
+    elif op == 'partnerDelete': post(f"/partners/{res(a['partner'])}/delete", {})
+    elif op == 'partnerLoan': post(f"/partners/{res(a['partner'])}/loan", form(a, 'amount', 'account_id', 'occurred_on', 'note', 'settled_amount', 'settled_currency'))
+    elif op == 'partnerRepay': post(f"/partners/{res(a['partner'])}/repay", form(a, 'amount', 'account_id', 'occurred_on', 'note', 'settled_amount', 'settled_currency'))
+    elif op == 'partnerEntryDelete': post(f"/partners/ledger/{res(a['entry'])}/delete", {})
+    elif op == 'distribute': post('/partners/distribute', form(a, 'total_amount', 'account_id', 'occurred_on', 'notes', 'override'))
+    elif op == 'distributionDelete': post(f"/partners/distributions/{res(a['distribution'])}/delete", {})
+    elif op == 'expenseNew': post('/expenses/new', {**form(a, 'category', 'description', 'currency_code', 'expense_date', 'paid_from'), 'amount': str(a['amount']), 'category': a['category']})
+    elif op == 'expenseEdit': post(f"/expenses/{res(a['expense'])}/edit", {**form(a, 'category', 'description', 'amount', 'currency_code', 'expense_date'), 'paid_from': str(res(a.get('paid_from', '')) or '')})
+    elif op == 'expenseDelete': post(f"/expenses/{res(a['expense'])}/delete", {})
+    elif op == 'costCorrectionsFix': post('/reports/cost-corrections/fix', {})
     else: raise SystemExit('unknown op ' + op)
     changed = checksum() != before
     if step.get('save'):
         import re as _re
         table = {'c': 'customers', 'p': 'products', 'v': 'variants', 'o': 'orders', 'sup': 'suppliers', 'po': 'purchase_orders',
-                 'as': 'assortments', 'loc': 'locations', 'sh': 'shipments'}[_re.match('[a-z]+', step['save']).group(0)]
+                 'as': 'assortments', 'loc': 'locations', 'sh': 'shipments',
+                 'acc': 'cash_accounts', 'pt': 'partners', 'rt': 'exchange_rates', 'ex': 'expenses', 'dist': 'distributions'}[_re.match('[a-z]+', step['save']).group(0)]
         names[step['save']] = val(f'SELECT MAX(id) FROM "{table}"')
     log.append({'op': op, 'ok': changed})
 # The app keeps recent changes in a WAL file: copy through SQLite so they're included.

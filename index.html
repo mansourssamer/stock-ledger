@@ -235,6 +235,11 @@ textarea.inp{height:auto;min-height:62px;padding:9px 11px;resize:vertical}
 .subnav a[aria-current="page"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .mbot{margin-bottom:12px}.tile .v small{font-size:13px;font-weight:500;color:var(--muted)}
 tr.why td{background:var(--sunken);white-space:normal}.whylines{font-size:12.5px;line-height:1.65;max-width:860px}.whylines .n{display:inline-block;width:18px;color:var(--muted);font-family:var(--font-mono)}
+.plist{display:flex;flex-direction:column}.pl{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--line)}
+.pl:last-child{border-bottom:0}.pl.subl span{padding-left:14px;color:var(--muted)}.pl.tot{font-weight:650;border-bottom:2px solid var(--line-strong)}.pl b{font-variant-numeric:tabular-nums;white-space:nowrap}
+.rbar{flex-wrap:wrap;gap:10px;margin-bottom:12px}a.chip{display:inline-flex;align-items:center;text-decoration:none}.dates{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.dates .inp{width:auto;min-width:0}
+pre.copytext{white-space:pre-wrap;font-family:var(--font-mono);font-size:12px;background:var(--sunken);padding:12px;border-radius:var(--r);max-height:320px;overflow:auto;margin:0 0 10px}
+.gain{color:var(--good)}
 .actions.left{justify-content:flex-start;margin:-4px 0 16px}
 span.chip{display:inline-flex;align-items:center;cursor:default;color:var(--ink)}
 .chip .linkbtn{margin-left:6px;color:var(--muted)}
@@ -374,7 +379,7 @@ span.chip{display:inline-flex;align-items:center;cursor:default;color:var(--ink)
 .doc .tot div{display:flex;justify-content:space-between;padding:3px 0;gap:12px}
 .doc .tot .g{font-weight:700;border-top:1px solid #1C2530;margin-top:6px;padding-top:8px;font-size:15px}
 .docbar{display:flex;gap:8px;justify-content:space-between;align-items:center;max-width:760px;margin:0 auto 12px}
-@media print{body{background:#fff}#root>.app>.rail,.tabbar,.mtop,.docbar,.toast,#modals{display:none!important}.app{display:block}.main{padding:0}.doc{border:0;padding:0;max-width:none}.wrap{max-width:none}}
+@media print{body{background:#fff}#root>.app>.rail,.tabbar,.mtop,.docbar,.toast,#modals,.subnav,.rbar,.vh .actions,.noprint{display:none!important}.app{display:block}.main{padding:0}.doc{border:0;padding:0;max-width:none}.wrap{max-width:none}}
 .pimg img{max-height:260px;border-radius:var(--r);border:1px solid var(--line);background:var(--surface)}
 .mtop .dot{margin-left:auto}
 .sheet{position:fixed;left:0;right:0;bottom:0;z-index:60;max-height:85vh;overflow-y:auto;background:var(--surface);border-radius:16px 16px 0 0;box-shadow:var(--shadow);padding:10px 14px calc(18px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:14px}
