@@ -35,7 +35,7 @@ export const ic = n => `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="c
 
 // ---------- state ----------
 export const S = { auth: 'loading', user: null, email: '', fs: null, authObj: null, ready: false, online: navigator.onLine, err: '' };
-export const UI = { menuOpen: false, gate: { email: '', password: '', err: '', busy: false } };
+export const UI = { menuOpen: false, gate: { email: '', password: '', err: '', note: '', busy: false } };
 
 // ---------- navigation ----------
 // Groups shown in the side menu; each item: [route, label, icon]. Not-yet-rebuilt parts
@@ -135,6 +135,12 @@ function gate() {
       <p class="sub">config.js → firebaseConfig</p>`;
   } else if (S.auth === 'loading') {
     h = `<p>${esc(t('Loading your data…'))}</p>`;
+  } else if (S.auth === 'verify') {
+    h = `<h1>${esc(t('Confirm your email'))}</h1><p>${esc(t('{e} isn’t confirmed yet. Send yourself a link, open it from your inbox, then come back here.', { e: S.email }))}</p>
+      ${g.note ? `<p class="callout good">${esc(g.note)}</p>` : ''}${g.err ? `<p class="errline">${esc(g.err)}</p>` : ''}
+      <button type="button" class="btn big" data-act="verifySend"${g.busy ? ' disabled' : ''}>${esc(t('Send the link'))}</button>
+      <button type="button" class="btn primary big" data-act="verifyDone"${g.busy ? ' disabled' : ''}>${esc(t('I’ve confirmed it'))}</button>
+      <button type="button" class="linkbtn" data-act="signOut">${esc(t('Sign in with another account'))}</button>`;
   } else if (S.auth === 'denied') {
     h = `<h1>${esc(t('Not allowed'))}</h1><p><b>${esc(S.email)}</b> — ${esc(t('This account can’t open the data. Check that the security rules are published with your email, then try again.'))}</p>
       <button type="button" class="btn primary big" data-act="reload">${esc(t('Try again'))}</button>
@@ -146,8 +152,9 @@ function gate() {
       <form class="stack" id="gate-form" novalidate>
         <div class="field"><label for="g-email">${esc(t('Email'))}</label><input id="g-email" class="inp" type="email" autocomplete="email" value="${esc(g.email)}"></div>
         <div class="field"><label for="g-pass">${esc(t('Password'))}</label><input id="g-pass" class="inp" type="password" autocomplete="current-password"></div>
-        ${g.err ? `<p class="errline">${esc(g.err)}</p>` : ''}
+        ${g.err ? `<p class="errline">${esc(g.err)}</p>` : ''}${g.note ? `<p class="callout good">${esc(g.note)}</p>` : ''}
         <button type="submit" class="btn primary big"${g.busy ? ' disabled' : ''}>${esc(g.busy ? t('Please wait…') : t('Sign in'))}</button>
+        <button type="button" class="linkbtn" data-act="forgot">${esc(t('Forgot password? / No password yet?'))}</button>
       </form>`;
   }
   return `<div class="gate"><div class="gate-card">${gateBrand()}${h}
@@ -158,6 +165,11 @@ function authErr(e) {
   if (c === 'auth/invalid-credential' || c === 'auth/wrong-password' || c === 'auth/user-not-found') return t('Wrong email or password.');
   if (c === 'auth/network-request-failed') return t('No internet connection. Signing in needs the internet once; after that the app works offline.');
   if (c === 'auth/unauthorized-domain') return t('This web address isn’t allowed yet. In Firebase, open Authentication → Settings → Authorized domains and add it.');
+  if (['auth/popup-blocked', 'auth/popup-closed-by-user', 'auth/cancelled-popup-request', 'auth/operation-not-supported-in-this-environment', 'auth/web-storage-unsupported'].includes(c))
+    return t('Google sign-in didn’t finish. In an app added to a phone’s home screen this often happens: sign in with your email and a password instead (set one in Settings on your computer, or tap “Forgot password?”).');
+  if (c === 'auth/operation-not-allowed') return t('Email sign-in isn’t switched on in Firebase yet: Authentication → Sign-in method → Email/Password → Enable.');
+  if (c === 'auth/too-many-requests') return t('Too many tries. Wait a few minutes, then try again.');
+  if (c === 'auth/invalid-email' || c === 'auth/missing-email') return t('Check the email address.');
   return t('Couldn’t sign in. Try again.');
 }
 
@@ -177,8 +189,37 @@ registerActions({
   menu: () => { UI.menuOpen = !UI.menuOpen; schedule(); },
   reload: () => location.reload(),
   signOut: async () => { try { await F.signOut(S.authObj); } catch { /* already out */ } location.reload(); },
+  // A link to choose a password: works for a new password and for a Google account that has none yet.
+  forgot: async () => {
+    const g = UI.gate;
+    g.email = ($('#g-email') || {}).value ? $('#g-email').value.trim() : g.email;
+    g.err = ''; g.note = '';
+    if (!g.email) { g.err = t('Type your email above first.'); schedule(); return; }
+    g.busy = true; schedule();
+    try { await F.sendPasswordResetEmail(S.authObj, g.email); g.note = t('If {e} has an account, a link to choose a password is on its way. Check your inbox (and spam), choose the password, then sign in here.', { e: g.email }); }
+    catch (e) { g.err = authErr(e); }
+    g.busy = false; schedule();
+  },
+  verifySend: async () => {
+    const g = UI.gate; g.err = ''; g.note = ''; g.busy = true; schedule();
+    try { await F.sendEmailVerification(S.authObj.currentUser); g.note = t('Link sent to {e}. Open it, then come back and tap “I’ve confirmed it”.', { e: S.email }); }
+    catch (e) { g.err = authErr(e); }
+    g.busy = false; schedule();
+  },
+  verifyDone: async () => {
+    const g = UI.gate; g.err = ''; g.busy = true; schedule();
+    try {
+      const u = S.authObj.currentUser;
+      await u.reload();
+      if (S.authObj.currentUser.emailVerified) {
+        await S.authObj.currentUser.getIdToken(true);   // the security rules read the confirmation from a fresh token
+        g.note = ''; S.auth = 'ready'; store.start();
+      } else g.err = t('Not confirmed yet. Open the link in the email first (check spam too).');
+    } catch (e) { g.err = authErr(e); }
+    g.busy = false; schedule();
+  },
   google: async () => {
-    UI.gate.err = ''; UI.gate.busy = true; schedule();
+    UI.gate.err = ''; UI.gate.note = ''; UI.gate.busy = true; schedule();
     try { await F.signInWithPopup(S.authObj, new F.GoogleAuthProvider()); } catch (e) { UI.gate.err = authErr(e); }
     UI.gate.busy = false; schedule();
   }
@@ -197,7 +238,7 @@ document.addEventListener('submit', async e => {
   g.email = $('#g-email').value.trim();
   const pw = $('#g-pass').value;
   if (!g.email || !pw) return;
-  g.err = ''; g.busy = true; schedule();
+  g.err = ''; g.note = ''; g.busy = true; schedule();
   try { await F.signInWithEmailAndPassword(S.authObj, g.email, pw); } catch (err) { g.err = authErr(err); }
   g.busy = false; schedule();
 });
@@ -235,6 +276,9 @@ async function boot() {
     S.user = user;
     S.email = user ? String(user.email || '').toLowerCase() : '';
     if (!user) { S.auth = 'signedOut'; schedule(); return; }
+    // An email-and-password account opens the data once its email is confirmed: the security
+    // rules ask for that, so nobody can use the address without owning it. (Google accounts are.)
+    if (!user.emailVerified) { S.auth = 'verify'; schedule(); return; }
     S.auth = 'ready';
     store.start();
     schedule();

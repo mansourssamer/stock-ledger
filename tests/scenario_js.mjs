@@ -85,6 +85,7 @@ for (const step of JSON.parse(fs.readFileSync(scenPath))) {
       case 'orderCreateInvoice': S.orderCreateInvoice(a.order); break;
       case 'orderItemReturn': S.orderItemReturn(a.order, a.item, a); break;
       case 'orderBoxLineReturn': S.orderBoxLineReturn(a.order, a.line, a); break;
+      case 'invoiceVoid': S.invoiceVoid(a.invoice); break;
       case 'invoicePay': S.invoicePay(a.invoice, a); break;
       case 'invoicePaymentDelete': S.invoicePaymentDelete(a.payment); break;
       case 'boxCountFirstOpen': {

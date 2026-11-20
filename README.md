@@ -38,7 +38,9 @@ Everything the old app does is rebuilt. Until the switch-over (below), keep usin
 | `js/moneydata.js`, `js/moneypages.js` | Accounts, expenses, partners and currencies pages |
 | `js/crmdata.js`, `js/crmpages.js`, `js/ops/crm.js` | The CRM and proformas |
 | `js/backup.js`, `js/backupdb.js`, `js/oldschema.js` | Backups: the data as an erp.db in the old app's format, with photos and documents |
-| `js/settings.js` | Settings: backup, language, account |
+| `js/settings.js` | Settings: backup, language, account, the password for signing in on a phone |
+| `js/csvdata.js` | The CSV exports of the list pages (same columns as the old app) |
+| `js/stockdata.js` | The open boxes (single pairs) page |
 | `js/docs.js` | Customer documents in French: invoice, statement, price list |
 | `js/queries.js` | The calculations, ported from the old app with the same SQL |
 | `js/localdb.js` | The device's working copy: SQLite in memory (sql.js) |
@@ -59,8 +61,11 @@ the Python app). Ids imported from the old app stay numbers; records made here g
 like `n20261120143055123k0ab` that sort after them, by time.
 
 **Firestore holds the rows in buckets.** Each table is a Firestore collection whose documents
-hold up to 200 rows: `{rows: {id: row}, updatedAt}`. Old rows go in bucket `i<id ÷ 200>`, new
-rows in a bucket per day (`n20261120`). A sale touching 40 boxes is a few document writes, and
+hold about 200 rows: `{rows: {id: row}, updatedAt}`. Old rows go in bucket `i<id ÷ 200>`, new
+rows in pages of 200 per day (`n20261120aa`, `n20261120ab`…), which keeps every document far
+below Firestore's limits (1 MiB and 40,000 index entries) even on the day a container arrives.
+Orders and purchase orders made here get their number when made (`ref_numbers`), so it never
+changes and backups give the old app the same numbers. A sale touching 40 boxes is a few document writes, and
 the whole business fits in a few hundred documents — far inside the free quota (50,000 reads
 and 20,000 writes a day).
 
@@ -81,7 +86,9 @@ fetched only when shown. Photos are shrunk to phone size; documents over 700 KB 
 1. **Firebase project** on your own Google account: console.firebase.google.com → Add project.
 2. **Database**: Firestore Database → Create database → Standard edition → `europe-west1` →
    production mode.
-3. **Sign-in**: Authentication → Sign-in method → enable **Google** (and Email/Password).
+3. **Sign-in**: Authentication → Sign-in method → enable **Google** and **Email/Password**. Google sign-in
+   may not open in an app added to an iPhone's home screen, so the phone signs in with email and a
+   password: set it in the app under Settings → Account → Set a password (it's added to the same account).
 4. **Web app**: Project settings → Your apps → `</>` → register. Copy `firebaseConfig` into
    `config.js`.
 5. **Rules**: Firestore → Rules → paste `firestore.rules`, replace `OWNER_EMAIL` with your email
@@ -136,6 +143,16 @@ opens with internet.
 - `node tests/backup_check.mjs new.db backup.db` — the backup database from a database this app made; the old app's
   figures on it (`tests/py_reference.py`) match the old app's own.
 - `node tests/offline.cjs backup.zip outdir` — opens the app with no network (and checks every file is kept on the device).
+- `node tests/e2e_container.cjs backup.zip outdir [boxes per mix]` — a whole container received in one go, with the test
+  Firebase refusing anything the real one would (1 MiB and 40,000 index entries per document, 500 writes and 10 MiB per commit).
+- `python3 tests/bucket_limits.py new.db` — every Firestore document a database makes stays inside those limits
+  (`tests/scenario_make_container.py` with `diff_run.sh` makes a 1,000-box container day through both apps).
+- `node tests/ids_check.mjs` — ids, day pages, and order numbers that never change once given.
+- `tests/csv_compare.sh OLD_APP_DIR erp.db workdir` — the CSV exports of both apps, cell by cell.
+- `node tests/e2e_auth.cjs outdir` — signing in: a password for the phone, a Google popup that fails, forgotten password, confirming an email.
+- `node tests/e2e_extras.cjs backup.zip outdir [--phone]` — CSV buttons, voiding an invoice, the open boxes page.
+- `node tests/sweep.cjs backup.zip outdir [--empty | --new-records]` — every screen in French and English, computer and phone:
+  page errors, "undefined"/"NaN", raw ids, sideways scrolling, hidden text, texts with no French.
 - `node tests/e2e_switch.cjs backup.zip older.zip outdir [--phone]` — the switch-over: same backup twice changes nothing,
   a record entered here blocks the import until the copy is downloaded, the copy brings it back, an older backup is flagged.
 

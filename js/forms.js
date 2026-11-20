@@ -25,7 +25,7 @@ function fieldHtml(f, vals) {
     case 'date': return `<div class="field${cls}">${lab}<input id="${id}" name="${f.name}" class="inp" type="date" value="${esc(v || '')}"${f.future ? '' : ` max="${today()}"`}>${hint}</div>`;
     case 'file': return `<div class="field full">${lab}<input id="${id}" name="${f.name}" type="file" accept="${esc(f.accept || '')}">${hint}</div>`;
     case 'number': case 'money': return `<div class="field${cls}">${lab}<input id="${id}" name="${f.name}" class="inp n" inputmode="decimal" autocomplete="off" value="${esc(v)}" placeholder="${esc(f.placeholder || '')}">${hint}</div>`;
-    default: return `<div class="field${cls}">${lab}<input id="${id}" name="${f.name}" class="inp" type="${f.type || 'text'}" autocomplete="off" value="${esc(v)}" placeholder="${esc(f.placeholder || '')}">${hint}</div>`;
+    default: return `<div class="field${cls}">${lab}<input id="${id}" name="${f.name}" class="inp" type="${f.type || 'text'}" autocomplete="${f.type === 'password' ? 'new-password' : 'off'}" value="${esc(v)}" placeholder="${esc(f.placeholder || '')}">${hint}</div>`;
   }
 }
 

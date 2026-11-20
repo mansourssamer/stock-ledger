@@ -210,6 +210,15 @@ async function runImport() {
       for (const [b, rows] of Object.entries(server)) L.replaceBucket(name, b, rows);
     });
   }
+  // Tables only this app keeps (order numbers) were emptied above: empty this device's copy too.
+  for (const name of Object.keys(TABLES)) {
+    if (P.rows[name]) continue;
+    const server = await store.serverBuckets(name);
+    L.batch(() => {
+      L.replaceBucket(name, 'all', {});
+      for (const [b, rows] of Object.entries(server)) L.replaceBucket(name, b, rows);
+    });
+  }
   // 4. The headline figures, computed the same way on the backup and on the new copy.
   const fig = () => ({ stock: Q.stockValueLanded(), owed: Q.dashboardFigures().outstanding_total, cash: Q.totalCashOnHand(),
     boxes: L.val(`SELECT COUNT(*) FROM boxes WHERE status = 'in_stock'`) });

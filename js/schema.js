@@ -44,5 +44,6 @@ export const TABLES = {
   "shipments": {"key": "id", "cols": [["id", ""], ["reference", "TEXT"], ["container_no", "TEXT"], ["bl_number", "TEXT"], ["vessel", "TEXT"], ["status", "TEXT", "preparing"], ["eta", "TEXT"], ["shipped_at", "TEXT"], ["arrived_at", "TEXT"], ["cleared_at", "TEXT"], ["received_at", "TEXT"], ["notes", "TEXT"], ["created_at", "TEXT", {"now": "datetime"}]]},
   "stock_moves": {"key": "id", "cols": [["id", ""], ["variant_id", ""], ["change_qty", "INTEGER"], ["reason", "TEXT"], ["ref_type", "TEXT"], ["ref_id", ""], ["note", "TEXT"], ["created_at", "TEXT", {"now": "datetime"}]]},
   "suppliers": {"key": "id", "cols": [["id", ""], ["name", "TEXT"], ["email", "TEXT"], ["phone", "TEXT"], ["address", "TEXT"], ["created_at", "TEXT", {"now": "datetime"}]]},
-  "variants": {"key": "id", "cols": [["id", ""], ["product_id", ""], ["color", "TEXT", ""], ["size", "TEXT"], ["sku", "TEXT"], ["created_at", "TEXT", {"now": "datetime"}]]}
+  "variants": {"key": "id", "cols": [["id", ""], ["product_id", ""], ["color", "TEXT", ""], ["size", "TEXT"], ["sku", "TEXT"], ["created_at", "TEXT", {"now": "datetime"}]]},
+  "ref_numbers": {"key": "id", "cols": [["id", ""], ["tbl", "TEXT"], ["number", "INTEGER"]]}
 };

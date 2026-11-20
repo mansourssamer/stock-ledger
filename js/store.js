@@ -65,6 +65,22 @@ function applyChanges(name, changes) {
 }
 
 // ---------- writing ----------
+// Firestore takes at most 500 writes and 10 MiB in one commit: split a long list into commits
+// of at most 400 documents and about 4 MB (one operation almost always fits in one, so it
+// lands all at once).
+const PART_DOCS = 400, PART_BYTES = 4 * 1024 * 1024;
+function commitParts(items, dataOf) {
+  const parts = [];
+  let cur = [], bytes = 0;
+  for (const it of items) {
+    const n = JSON.stringify(dataOf(it)).length + 200;
+    if (cur.length && (cur.length >= PART_DOCS || bytes + n > PART_BYTES)) { parts.push(cur); cur = []; bytes = 0; }
+    cur.push(it); bytes += n;
+  }
+  if (cur.length) parts.push(cur);
+  return parts;
+}
+
 // await change(() => { ...SQL on the local copy, as the old app did... })
 // The operation runs synchronously on the device copy and either completes or leaves no
 // trace (an error thrown inside undoes it). Every row it touched is then uploaded in the
@@ -100,9 +116,9 @@ async function upload(touched) {
   }
   const list = [...groups.values()];
   const commits = [];
-  for (let i = 0; i < list.length; i += 450) {
+  for (const part of commitParts(list, g => g.rows)) {
     const b = F.writeBatch(S.fs);
-    for (const g of list.slice(i, i + 450)) b.set(F.doc(S.fs, g.table, g.bucket), { rows: g.rows, updatedAt: F.serverTimestamp() }, { merge: true });
+    for (const g of part) b.set(F.doc(S.fs, g.table, g.bucket), { rows: g.rows, updatedAt: F.serverTimestamp() }, { merge: true });
     S.pending++;
     commits.push(b.commit().finally(() => { S.pending--; changed(); }));
   }
@@ -134,13 +150,11 @@ export async function serverBuckets(name) {
 // Writes full bucket documents (replacing what was there), in batches.
 export async function writeBuckets(items, onProgress) {
   let done = 0;
-  for (let i = 0; i < items.length; i += 200) {
+  for (const part of commitParts(items, it => it.data)) {
     const b = F.writeBatch(S.fs);
-    for (const it of items.slice(i, i + 200)) {
-      b.set(F.doc(S.fs, it.coll, it.id), { ...it.data, updatedAt: F.serverTimestamp() });
-    }
+    for (const it of part) b.set(F.doc(S.fs, it.coll, it.id), { ...it.data, updatedAt: F.serverTimestamp() });
     await b.commit();
-    done = Math.min(items.length, i + 200);
+    done += part.length;
     if (onProgress) onProgress(done, items.length);
   }
 }

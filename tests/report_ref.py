@@ -57,7 +57,8 @@ if zones:
 for k in contacts:
     pages.append(dict(name=f'crm-contact-{k}', url=f'/crm/contacts/{k}', js=['contactPage', k]))
 pages += [dict(name='partners', url='/partners', js=['partnersPage']), dict(name='accounts', url='/accounts', js=['accountsPage']),
-          dict(name='expenses', url='/expenses', js=['expensesPage']), dict(name='currencies', url='/currencies', js=['currenciesPage'])]
+          dict(name='expenses', url='/expenses', js=['expensesPage']), dict(name='currencies', url='/currencies', js=['currenciesPage']),
+          dict(name='boxes-open', url='/boxes/open', js=['openBoxesPage'])]
 SKIP = {'crm', 'products', 'zones', 'text', 'mailto', 'whatsapp', 'row_label', 'long_date', 'request', 'session', 'g', 'config', 'get_flashed_messages', 'url_for', 'csv_link', 'print_link',
         'prev_link', 'next_link', 'partner_emails', 'generated', 'as_of', 'month_name', 'range_label', 'prev_label', 'account_types', 'currencies', 'accounts_choices'}
 def clean(v):

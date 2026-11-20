@@ -22,10 +22,23 @@ export function buildBackupDb() {
   const maps = {};
   let renumbered = 0;
   for (const [name, def] of Object.entries(TABLES)) {
-    if (def.key !== 'id') continue;
-    const base = L.val(`SELECT COALESCE(MAX(id), 0) FROM "${name}" WHERE typeof(id) = 'integer'`) || 0;
+    if (def.key !== 'id' || name === 'ref_numbers') continue;
+    const used = new Set(L.all(`SELECT id FROM "${name}" WHERE typeof(id) = 'integer'`).map(r => r.id));
     const m = new Map();
-    L.all(`SELECT id FROM "${name}" WHERE typeof(id) = 'text' ORDER BY id`).forEach((r, i) => m.set(r.id, base + i + 1));
+    // orders and purchase orders keep the number shown in this app (unless two phones gave the same one)
+    if (L.NUMBERED.has(name)) {
+      for (const r of L.all(`SELECT t.id, n.number FROM "${name}" t JOIN ref_numbers n ON n.id = t.id AND n.tbl = ?
+                             WHERE typeof(t.id) = 'text' ORDER BY t.id`, [name])) {
+        if (r.number && !used.has(r.number)) { m.set(r.id, r.number); used.add(r.number); }
+      }
+    }
+    let next = Math.max(L.val(`SELECT COALESCE(MAX(id), 0) FROM "${name}" WHERE typeof(id) = 'integer'`) || 0,
+      L.NUMBERED.has(name) ? L.val(`SELECT COALESCE(MAX(number), 0) FROM ref_numbers WHERE tbl = ?`, [name]) || 0 : 0);
+    for (const r of L.all(`SELECT id FROM "${name}" WHERE typeof(id) = 'text' ORDER BY id`)) {
+      if (m.has(r.id)) continue;
+      while (used.has(++next));
+      m.set(r.id, next); used.add(next);
+    }
     maps[name] = m;
     renumbered += m.size;
   }

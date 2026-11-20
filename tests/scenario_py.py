@@ -105,6 +105,7 @@ for step in json.load(open(scen_path)):
     elif op == 'orderCreateInvoice': post(f"/orders/{res(a['order'])}/invoice", {})
     elif op == 'orderItemReturn': post(f"/orders/{res(a['order'])}/items/{res(a['item'])}/return", form(a, 'qty', 'restock', 'reason'))
     elif op == 'orderBoxLineReturn': post(f"/orders/{res(a['order'])}/box-lines/{res(a['line'])}/return", form(a, 'qty', 'restock', 'reason'))
+    elif op == 'invoiceVoid': post(f"/invoices/{res(a['invoice'])}/void", {})
     elif op == 'invoicePay': post(f"/invoices/{res(a['invoice'])}/pay", form(a, 'amount', 'pay_in_full', 'paid_on', 'account_id', 'note'))
     elif op == 'invoicePaymentDelete': post(f"/invoices/payments/{res(a['payment'])}/delete", {})
     elif op == 'boxCountFirstOpen':

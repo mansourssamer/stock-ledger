@@ -9,6 +9,7 @@ const R = await import('../js/reports.js');
 let M = {};
 const CR = await import('../js/crmdata.js');
 const CO = await import('../js/ops/crm.js');
+const SD = await import('../js/stockdata.js');
 try { M = await import('../js/moneydata.js'); } catch (e) { if (!/Cannot find module/.test(e.message)) throw e; }
 await L.openLocal(require('sql.js'), require.resolve('sql.js/dist/sql-wasm.wasm'));
 const [, , dbIn, specPath] = process.argv;
@@ -42,6 +43,7 @@ for (const p of JSON.parse(fs.readFileSync(specPath))) {
     if (fn === 'crmCustomers' && v.rows) v = v;
     if (fn === 'contactPage' && v) v = { ...v, k: v.k };
   }
+  else if (SD[fn]) v = SD[fn](...a);
   else if (M[fn]) v = M[fn]();
   else continue;
   out[p.name] = plain(v);

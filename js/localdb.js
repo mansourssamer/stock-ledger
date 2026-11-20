@@ -54,10 +54,14 @@ export async function openLocal(initSqlJs, wasmUrl) {
 }
 
 // ---------- keys and buckets ----------
-// Records imported from the old app keep their number ids (123). Records made in this app
-// get text ids that sort after them and by time: n + YYYYMMDDHHMMSSmmm + 3 random letters.
-// Firestore stores rows in "bucket" documents of up to 200 rows, which keeps the number of
-// documents (and so the free daily quota) small.
+// Records imported from the old app keep their number ids (123). Records made in this app get
+// text ids that sort after them and by time: n + day + page + time + sequence + 2 random letters,
+// e.g. n20261120aa143055123000k0.
+// Firestore stores rows in "bucket" documents, which keeps the number of documents (and so the
+// free daily quota) small: imported rows 200 to a bucket (i<id ÷ 200>), and the rows a table gets
+// in a day in pages of about 200 (n20261120aa, n20261120ab, …). A document may hold at most
+// 1 MiB and 40,000 index entries; a container receipt (thousands of stock movements in a day)
+// would pass that in a single day bucket.
 export function keyFromDoc(table, k) {
   return TABLES[table].key === 'id' && /^\d+$/.test(k) ? Number(k) : k;
 }
@@ -66,18 +70,46 @@ export function bucketOf(table, key) {
   if (typeof key === 'number') return 'i' + Math.floor(key / 200);
   const s = String(key);
   if (/^\d+$/.test(s)) return 'i' + Math.floor(Number(s) / 200);
-  if (/^n\d{8}/.test(s)) return s.slice(0, 9);
+  if (/^n\d{8}[a-z]{2}/.test(s)) return s.slice(0, 11);
+  if (/^n\d{8}/.test(s)) return s.slice(0, 9);      // ids made before pages (n + day + time)
   return 'x';
 }
+export const PAGE_ROWS = 200;
+const pages = new Map();   // table/day -> {page, n}: the page new rows go to and how many it has
+function nextPage(p) {     // aa → ab … az → ba … zz (676 pages, 135,000 rows a day)
+  const i = Math.min(675, (p.charCodeAt(0) - 97) * 26 + (p.charCodeAt(1) - 97) + 1);
+  return String.fromCharCode(97 + Math.floor(i / 26), 97 + (i % 26));
+}
+// The fullest page of the day this device knows of (rows from other phones included).
+function lastPage(table, day) {
+  const st = DB.prepare(`SELECT substr(id, 10, 2) AS pg, COUNT(*) AS n FROM "${table}" WHERE typeof(id) = 'text'
+    AND substr(id, 1, 9) = ? AND substr(id, 10, 1) BETWEEN 'a' AND 'z' GROUP BY pg ORDER BY pg DESC LIMIT 1`);
+  try { st.bind(['n' + day]); return st.step() ? st.getAsObject() : null; } finally { st.free(); }
+}
+function pageFor(table, day) {
+  const k = table + '/' + day;
+  let s = pages.get(k);
+  if (!s || s.n >= PAGE_ROWS) {
+    const r = lastPage(table, day);   // look again before moving on: another phone may have filled it
+    s = r ? { page: r.pg, n: r.n } : { page: 'aa', n: 0 };
+    if (s.n >= PAGE_ROWS) s = { page: nextPage(s.page), n: 0 };
+    pages.set(k, s);
+  }
+  s.n++;
+  return s.page;
+}
 let lastStamp = '', seq = 0;
-export function newId() {
+export function newId(table) {
   const d = new Date();
   const p = (n, w = 2) => String(n).padStart(w, '0');
-  const stamp = `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}${p(d.getUTCMilliseconds(), 3)}`;
+  const day = `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}`;
+  const time = `${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}${p(d.getUTCMilliseconds(), 3)}`;
+  const stamp = day + time;
   seq = stamp === lastStamp ? seq + 1 : 0;
   lastStamp = stamp;
+  const page = table && TABLES[table] && TABLES[table].key === 'id' ? pageFor(table, day) : 'aa';
   const rand = Math.random().toString(36).slice(2, 4).padEnd(2, '0');
-  return `n${stamp}${seq.toString(36)}${rand}`;
+  return `n${day}${page}${time}${seq.toString(36).padStart(3, '0')}${rand}`;
 }
 
 // ---------- reading ----------
@@ -165,14 +197,26 @@ export function rollback() {
   DB.run('DELETE FROM _changes');
   inTx = false;
 }
+// Orders and purchase orders made here get their number when they are made (ref_numbers): the
+// next after every number used so far, deleted ones included, as the old app's AUTOINCREMENT did.
+export const NUMBERED = new Set(['orders', 'purchase_orders']);
+function giveNumber(table, id) {
+  const st = DB.prepare(`SELECT MAX(n) FROM (SELECT MAX(id) AS n FROM "${table}" WHERE typeof(id) = 'integer'
+                         UNION ALL SELECT MAX(number) FROM ref_numbers WHERE tbl = ?)`);
+  let top = 0;
+  try { st.bind([table]); if (st.step()) top = st.get()[0] || 0; } finally { st.free(); }
+  DB.run(`INSERT INTO ref_numbers (id, tbl, number) VALUES (?, ?, ?)`, [id, table, top + 1]);
+}
 // Inserts a row with a new id (unless one is given) and the table's defaults; returns the id.
 export function ins(table, obj) {
   const t = TABLES[table];
   const row = { ...obj };
-  if (t.key === 'id' && (row.id === undefined || row.id === null)) row.id = newId();
+  const fresh = t.key === 'id' && (row.id === undefined || row.id === null);
+  if (fresh) row.id = newId(table);
   const cols = Object.keys(row).filter(c => row[c] !== undefined);
   INVALIDATE();
   DB.run(`INSERT INTO "${table}" (${cols.map(c => `"${c}"`).join(',')}) VALUES (${cols.map(() => '?').join(',')})`, cols.map(c => cleanValue(row[c])));
+  if (fresh && NUMBERED.has(table)) giveNumber(table, row.id);
   return row[t.key];
 }
 export function deleteRow(table, key) {
@@ -183,13 +227,15 @@ function bucketWhere(table, bucket) {
   const k = `"${TABLES[table].key}"`;
   if (bucket === 'all') return ['1=1', []];
   if (bucket[0] === 'i') return [`typeof(${k}) = 'integer' AND ${k} / 200 = ?`, [Number(bucket.slice(1))]];
-  if (bucket[0] === 'n') return [`typeof(${k}) = 'text' AND substr(${k}, 1, 9) = ?`, [bucket]];
+  if (bucket[0] === 'n' && bucket.length === 11) return [`typeof(${k}) = 'text' AND substr(${k}, 1, 11) = ?`, [bucket]];
+  if (bucket[0] === 'n') return [`typeof(${k}) = 'text' AND substr(${k}, 1, 9) = ? AND substr(${k}, 10, 1) BETWEEN '0' AND '9'`, [bucket]];
   return [`typeof(${k}) = 'text' AND substr(${k}, 1, 1) != 'n' AND ${k} NOT GLOB '[0-9]*'`, []];
 }
 // Makes the local rows of one bucket exactly what its Firestore document holds.
 export function replaceBucket(table, bucket, rows) {
   const [w, p] = bucketWhere(table, bucket);
   INVALIDATE();
+  pages.clear();
   DB.run(`DELETE FROM "${table}" WHERE ${w}`, p);
   for (const [k, row] of Object.entries(rows || {})) {
     if (!row || row.deleted) continue;
@@ -198,6 +244,7 @@ export function replaceBucket(table, bucket, rows) {
 }
 export function clearAll() {
   INVALIDATE();
+  pages.clear();
   for (const name of Object.keys(TABLES)) DB.run(`DELETE FROM "${name}"`);
 }
 

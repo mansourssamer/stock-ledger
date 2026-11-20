@@ -25,6 +25,7 @@ export const plural = (n, one, many) => { const a = Math.abs(Number(n)); return 
 
 export function t(key, vars) {
   let s = LANG === 'fr' ? (FR[key] ?? key) : key;
+  if (LANG === 'fr' && !(key in FR) && globalThis.__frMissing) globalThis.__frMissing.add(key);   // tests list texts with no French
   if (vars) s = s.replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m));
   return s;
 }
@@ -115,6 +116,45 @@ const FR = {
   'The copy couldn’t be made: {e}': 'La copie n’a pas pu être faite : {e}', 'From now on': 'À partir de maintenant',
   'Enter new sales, payments and purchases only in this app. Keep your old app as it is for a few weeks in case you need to look something up, but don’t enter anything there any more, or the two will no longer agree.': 'Saisissez les nouvelles ventes, paiements et achats uniquement dans cette application. Gardez l’ancienne application telle quelle quelques semaines pour consulter si besoin, mais n’y saisissez plus rien, sinon les deux ne correspondront plus.',
   'Go to the home page': 'Aller à l’accueil', 'On a Mac, if the download turned into a folder, right-click the folder → Compress, then choose the .zip it makes.': 'Sur Mac, si le téléchargement est devenu un dossier, faites un clic droit sur le dossier → Compresser, puis choisissez le .zip obtenu.', 'Import another backup': 'Importer une autre sauvegarde',
+  // signing in on a phone: a password, confirming the email, clearer errors
+  'Confirm your email': 'Confirmez votre e-mail',
+  '{e} isn’t confirmed yet. Send yourself a link, open it from your inbox, then come back here.': '{e} n’est pas encore confirmé. Envoyez-vous un lien, ouvrez-le depuis votre boîte de réception, puis revenez ici.',
+  'Send the link': 'Envoyer le lien', 'I’ve confirmed it': 'C’est confirmé',
+  'Forgot password? / No password yet?': 'Mot de passe oublié ? / Pas encore de mot de passe ?',
+  'Type your email above first.': 'Tapez d’abord votre e-mail ci-dessus.',
+  'If {e} has an account, a link to choose a password is on its way. Check your inbox (and spam), choose the password, then sign in here.': 'Si {e} a un compte, un lien pour choisir un mot de passe arrive. Regardez votre boîte de réception (et les spams), choisissez le mot de passe, puis connectez-vous ici.',
+  'Link sent to {e}. Open it, then come back and tap “I’ve confirmed it”.': 'Lien envoyé à {e}. Ouvrez-le, puis revenez et touchez « C’est confirmé ».',
+  'Not confirmed yet. Open the link in the email first (check spam too).': 'Pas encore confirmé. Ouvrez d’abord le lien dans l’e-mail (regardez aussi les spams).',
+  'Google sign-in didn’t finish. In an app added to a phone’s home screen this often happens: sign in with your email and a password instead (set one in Settings on your computer, or tap “Forgot password?”).': 'La connexion Google n’a pas abouti. C’est fréquent dans une application ajoutée à l’écran d’accueil d’un téléphone : connectez-vous plutôt avec votre e-mail et un mot de passe (créez-le dans Réglages sur votre ordinateur, ou touchez « Mot de passe oublié ? »).',
+  'Email sign-in isn’t switched on in Firebase yet: Authentication → Sign-in method → Email/Password → Enable.': 'La connexion par e-mail n’est pas encore activée dans Firebase : Authentication → Sign-in method → Email/Password → Enable.',
+  'Too many tries. Wait a few minutes, then try again.': 'Trop d’essais. Attendez quelques minutes, puis réessayez.',
+  'Check the email address.': 'Vérifiez l’adresse e-mail.',
+  'Signed in as': 'Connecté en tant que', 'Password for your phone': 'Mot de passe pour votre téléphone', 'Set': 'Défini', 'Not set yet': 'Pas encore défini',
+  'Google sign-in may not open in an app added to a phone’s home screen. With a password, you sign in there with your email and that password.': 'La connexion Google peut ne pas s’ouvrir dans une application ajoutée à l’écran d’accueil d’un téléphone. Avec un mot de passe, vous vous y connectez avec votre e-mail et ce mot de passe.',
+  'Change the password': 'Changer le mot de passe', 'Set a password': 'Créer un mot de passe',
+  'You’ll sign in on your phone with {e} and this password.': 'Sur votre téléphone, vous vous connecterez avec {e} et ce mot de passe.',
+  'New password': 'Nouveau mot de passe', 'At least 8 characters.': 'Au moins 8 caractères.', 'Same password again': 'Le même mot de passe encore',
+  'Save the password': 'Enregistrer le mot de passe', 'Use at least 8 characters.': 'Utilisez au moins 8 caractères.',
+  'The two passwords are different.': 'Les deux mots de passe sont différents.', 'Sign in first.': 'Connectez-vous d’abord.',
+  'For safety, Firebase wants a fresh sign-in first: sign out, sign in again, then set the password straight away.': 'Par sécurité, Firebase demande une connexion récente : déconnectez-vous, reconnectez-vous, puis créez le mot de passe tout de suite.',
+  'That password is too easy to guess. Choose a longer one.': 'Ce mot de passe est trop facile à deviner. Choisissez-en un plus long.',
+  'Another account already uses this email with a password. On the sign-in screen, use “Forgot password?” instead.': 'Un autre compte utilise déjà cet e-mail avec un mot de passe. Sur l’écran de connexion, utilisez plutôt « Mot de passe oublié ? ».',
+  'No internet connection. Try again when you’re online.': 'Pas de connexion internet. Réessayez une fois en ligne.',
+  'Password saved. On your phone, sign in with your email and this password.': 'Mot de passe enregistré. Sur votre téléphone, connectez-vous avec votre e-mail et ce mot de passe.',
+  // open boxes (single pairs), voiding an invoice
+  'Open boxes (single pairs)': 'Cartons ouverts (paires au détail)', 'Open boxes — single pairs': 'Cartons ouverts — paires au détail',
+  'A box you open is no longer sold as a full box: its pairs are sold one by one, each at its exact landed cost. Pairs are taken from the box opened first.': 'Un carton ouvert ne se vend plus en carton entier : ses paires se vendent une par une, chacune à son coût de revient exact. Les paires sont prises dans le carton ouvert en premier.',
+  'Open one box': 'Ouvrir un carton', '{n} sealed': '{n} fermé(s)', 'No sealed boxes in stock.': 'Aucun carton fermé en stock.',
+  'Pairs available, by colour and size': 'Paires disponibles, par couleur et pointure', 'Style · colour': 'Modèle · couleur',
+  '{o} in open boxes, {l} loose, {c} on orders not delivered': '{o} dans des cartons ouverts, {l} en vrac, {c} sur des commandes non livrées', '{n} held': '{n} réservée(s)',
+  'Available = in open boxes + loose pairs, less pairs on orders not yet delivered (“held”).': 'Disponible = dans les cartons ouverts + paires en vrac, moins les paires sur des commandes pas encore livrées (« réservées »).',
+  'No single pairs available — open a box above.': 'Aucune paire au détail disponible — ouvrez un carton ci-dessus.',
+  'Open boxes': 'Cartons ouverts', 'Opened': 'Ouvert le', 'What’s left': 'Ce qui reste', 'Left': 'Reste', 'No open boxes.': 'Aucun carton ouvert.',
+  'Sold as single pairs — last 90 days': 'Vendu à la paire — 90 derniers jours',
+  'Which sizes and colours sell first as single pairs — worth looking at when you choose the size mix of the next order.': 'Les pointures et couleurs qui partent en premier à la paire — utile pour choisir l’assortiment de la prochaine commande.',
+  'No single pairs sold yet.': 'Aucune paire vendue au détail pour l’instant.',
+  'Void invoice': 'Annuler la facture', 'Void this invoice?': 'Annuler cette facture ?', 'Yes, void it': 'Oui, l’annuler',
+  'It no longer counts as owed. Payments already recorded on it stay and count towards the order. You can create a new invoice afterwards.': 'Elle ne compte plus comme due. Les paiements déjà enregistrés restent et comptent pour la commande. Vous pourrez créer une nouvelle facture ensuite.',
   'orders': 'commandes', 'order lines': 'lignes de commande', 'box lines': 'lignes de cartons', 'payments': 'paiements', 'customers': 'clients',
   'returns': 'retours', 'returned items': 'articles retournés', 'box contents': 'contenus de cartons', 'purchase order lines': 'lignes de bon de commande',
   'cost lines': 'lignes de frais', 'supplier payments': 'paiements fournisseurs', 'suppliers': 'fournisseurs', 'styles': 'modèles',

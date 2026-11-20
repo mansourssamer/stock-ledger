@@ -17,6 +17,12 @@ import { REPORT_SCREENS } from './reportpages.js';
 import { CRM_SCREENS } from './crmpages.js';
 import { SETTINGS_SCREENS } from './settings.js';
 import { followUpsToday } from './crmdata.js';
+import { openBoxesPage } from './stockdata.js';
+import * as CSV from './csvdata.js';
+import { downloadText } from './buy.js';
+import { confirmAction } from './forms.js';
+import * as SO from './ops/sales.js';
+import * as KO from './ops/stock.js';
 
 const UI = { stockQ: '', custQ: '', orderQ: '', orderStatus: '' };
 const hasData = () => !!val(`SELECT 1 FROM products LIMIT 1`) || !!val(`SELECT 1 FROM customers LIMIT 1`);
@@ -42,7 +48,7 @@ function home() {
   }
   const d = Q.dashboardFigures();
   const owed = d.outstanding_count === 1 ? t('on 1 invoice') : t('on {n} invoices', { n: d.outstanding_count });
-  const out = [header(t('Home'), { sub: esc(fmtDate(new Date().toISOString())), actions: `<button class="btn primary" data-act="newOrder">+ ${esc(t('New order'))}</button>` })];
+  const out = [header(t('Home'), { sub: esc(fmtDate(new Date().toISOString())), actions: `<button class="btn primary" data-act="newOrder">+ ${esc(t('New order'))}</button><button class="btn" data-act="csv" data-k="orders">${esc(t('Download CSV'))}</button>` })];
   out.push(tiles([
     tile(t('Stock value'), fmtShort(d.stock_value), esc(t('at landed cost')), 'stock', 'hl'),
     tile(t('Customers owe'), fmtShort(d.outstanding_total), esc(owed), 'customers', d.outstanding_total > 0 ? 'neg' : ''),
@@ -88,7 +94,7 @@ function stock() {
       `${fmtQty(p.total)} ${p.low ? pill(t('low'), 'warn') : ''}`,
       esc(fmtUsd(p.sale_price))] };
   });
-  return header(t('Stock'), { sub: `${styles.length} ${esc(t('Styles').toLowerCase())} · ${fmtQty(totalPairs)} ${esc(t('pairs'))}`, actions: `<button class="btn" data-act="newProduct">+ ${esc(t('New style'))}</button>` })
+  return header(t('Stock'), { sub: `${styles.length} ${esc(t('Styles').toLowerCase())} · ${fmtQty(totalPairs)} ${esc(t('pairs'))}`, actions: `<button class="btn" data-act="newProduct">+ ${esc(t('New style'))}</button><button class="btn" data-act="csv" data-k="products">${esc(t('Download CSV'))}</button>` })
     + `<div class="inline">${search('q-stock', UI.stockQ, t('Search a style, brand or code'))}</div>`
     + panel('', table([{ h: t('Styles') }, { h: t('Color'), cls: 'hide-sm' }, { h: t('On hand'), n: true }, { h: t('Price'), n: true, cls: 'hide-sm' }], rows, { emptyText: t('No products yet.') }), { tight: true });
 }
@@ -131,10 +137,11 @@ function boxes() {
     GROUP BY b.source_po_id, b.source_label ORDER BY received_at DESC`);
   const inStock = sum(groups, g => g.in_stock_count);
   const rows = groups.map(g => ({ href: mixHref(g.source_po_id, g.source_label), cls: g.in_stock_count ? '' : 'dim', cells: [
-    `<b>${esc(g.source_label)}</b><span class="sub">${esc(g.supplier_name || '')}${g.source_po_id ? ` · PO ${esc(g.source_po_id)}` : ''}</span>`,
+    `<b>${esc(g.source_label)}</b><span class="sub">${esc(g.supplier_name || '')}${g.source_po_id ? ` · PO #${esc(Q.poRef(g.source_po_id))}` : ''}</span>`,
     `<b>${fmtNum(g.in_stock_count)}</b>${g.open_count ? `<span class="sub">+${g.open_count} ${esc(t('open'))}</span>` : ''}`,
     fmtNum(g.sold_count), fmtNum(g.pairs_per_box), esc(fmtDate(g.received_at))] }));
-  return header(t('Inventory'), { sub: `${fmtNum(inStock)} ${esc(t('sealed boxes'))} · ${groups.length} ${esc(t('Mix').toLowerCase())}s` })
+  return header(t('Inventory'), { sub: `${fmtNum(inStock)} ${esc(t('sealed boxes'))} · ${groups.length} ${esc(t('Mix').toLowerCase())}s`,
+      actions: `<a class="btn" href="#/openboxes">${esc(t('Open boxes (single pairs)'))}</a>` })
     + panel('', table([{ h: t('Mix') }, { h: t('In stock'), n: true }, { h: t('Sold'), n: true, cls: 'hide-sm' }, { h: t('Pairs per box'), n: true, cls: 'hide-sm' }, { h: t('Received'), cls: 'hide-sm' }], rows,
       { emptyText: t('No boxes yet.') }), { tight: true });
 }
@@ -207,7 +214,7 @@ function customers() {
     `<b>${esc(c.name)}</b><span class="sub">${esc(c.phone || '')}</span>`,
     c.s.outstanding_usd > 0.004 ? `<b class="neg">${esc(fmtUsd(c.s.outstanding_usd))}</b>${c.s.days_outstanding !== null ? `<span class="sub">${esc(t('oldest unpaid: {n} days', { n: c.s.days_outstanding }))}</span>` : ''}` : '<span class="muted">—</span>',
     esc(fmtUsd(c.s.lifetime_sold_usd))] }));
-  return header(t('Customers'), { sub: `${list.length} · ${esc(t('Customers owe'))} ${esc(fmtUsd(owed))}`, actions: `<button class="btn" data-act="newCustomer">+ ${esc(t('New customer'))}</button>` })
+  return header(t('Customers'), { sub: `${list.length} · ${esc(t('Customers owe'))} ${esc(fmtUsd(owed))}`, actions: `<button class="btn" data-act="newCustomer">+ ${esc(t('New customer'))}</button><button class="btn" data-act="csv" data-k="customers">${esc(t('Download CSV'))}</button>` })
     + `<div class="inline">${search('q-cust', UI.custQ, t('Search a name or phone'))}</div>`
     + panel('', table([{ h: t('Customer') }, { h: t('Owes'), n: true }, { h: t('Bought'), n: true, cls: 'hide-sm' }], rows, { emptyText: t('No customers yet.') }), { tight: true });
 }
@@ -226,7 +233,7 @@ function customer(id) {
     e.charge ? esc(fmtMoney(e.charge, e.currency_code)) : '', e.payment ? esc(fmtMoney(e.payment, e.currency_code)) : '', esc(fmtMoney(e.balance, e.currency_code))] }));
   const buyRows = buying.map(b => ({ cells: [esc(b.source_label), fmtNum(b.boxes), esc(fmtMoney(b.avg_price, b.currency_code)), esc(fmtDate(b.last_bought))] }));
   return header(c.name, { back: 'customers', sub: esc([c.phone, c.address].filter(Boolean).join(' · ')),
-      actions: `<button class="btn primary" data-act="newOrder" data-c="${esc(cid)}">+ ${esc(t('New order'))}</button>${s.outstanding_usd > 0.004 ? `<button class="btn" data-act="payCustomer" data-id="${esc(cid)}">${esc(t('Record a payment'))}</button>` : ''}<a class="btn" href="#/doc/statement/${esc(cid)}">${esc(t('Statement'))}</a>${(() => { const k = one(`SELECT id FROM crm_contacts WHERE customer_id = ?`, [cid]); return k ? `<a class="btn" href="#/crmcontact/${esc(k.id)}">CRM</a>` : ''; })()}<button class="btn ghost" data-act="editCustomer" data-id="${esc(cid)}">${esc(t('Edit'))}</button><button class="btn ghost danger" data-act="delCustomer" data-id="${esc(cid)}">${esc(t('Delete'))}</button>` })
+      actions: `<button class="btn primary" data-act="newOrder" data-c="${esc(cid)}">+ ${esc(t('New order'))}</button>${s.outstanding_usd > 0.004 ? `<button class="btn" data-act="payCustomer" data-id="${esc(cid)}">${esc(t('Record a payment'))}</button>` : ''}<a class="btn" href="#/doc/statement/${esc(cid)}">${esc(t('Statement'))}</a><button class="btn" data-act="csv" data-k="ledger" data-id="${esc(cid)}">${esc(t('Download CSV'))}</button>${(() => { const k = one(`SELECT id FROM crm_contacts WHERE customer_id = ?`, [cid]); return k ? `<a class="btn" href="#/crmcontact/${esc(k.id)}">CRM</a>` : ''; })()}<button class="btn ghost" data-act="editCustomer" data-id="${esc(cid)}">${esc(t('Edit'))}</button><button class="btn ghost danger" data-act="delCustomer" data-id="${esc(cid)}">${esc(t('Delete'))}</button>` })
     + tiles([
       tile(t('Owes'), fmtShort(s.outstanding_usd), s.days_outstanding !== null ? esc(t('oldest unpaid: {n} days', { n: s.days_outstanding })) : '', '', s.outstanding_usd > 0.004 ? 'neg' : ''),
       tile(t('Lifetime sales'), fmtShort(s.lifetime_sold_usd), `${s.invoice_count} ${esc(plural(s.invoice_count, 'invoice', 'invoices'))}`),
@@ -251,25 +258,56 @@ function orders() {
     `<span class="mono">${orderNo(o.id)}</span><span class="sub">${esc(fmtDate(o.created_at))}</span>`,
     esc(o.customer_name || t('Walk-in customer')) + (o.boxes ? `<span class="sub">${fmtNum(o.boxes)} ${esc(t('boxes'))}</span>` : ''),
     orderPill(o.status), esc(fmtMoney(o.order_total, o.currency_code))] }));
-  return header(t('Sales'), { sub: `${list.length} ${esc(t('Orders').toLowerCase())}`, actions: `<button class="btn primary" data-act="newOrder">+ ${esc(t('New order'))}</button>` })
+  return header(t('Sales'), { sub: `${list.length} ${esc(t('Orders').toLowerCase())}`, actions: `<button class="btn primary" data-act="newOrder">+ ${esc(t('New order'))}</button><button class="btn" data-act="csv" data-k="orders">${esc(t('Download CSV'))}</button>` })
     + `<div class="inline">${search('q-order', UI.orderQ, t('Search an order or customer'))}<div class="seg">${seg}</div></div>`
     + panel('', table([{ h: t('Order') }, { h: t('Customer') }, { h: t('Status'), cls: 'hide-sm' }, { h: t('Total'), n: true }], rows, { emptyText: t('No orders yet.') }), { tight: true });
 }
 
+// ---------- open boxes: single pairs ----------
+function openBoxes() {
+  const p = openBoxesPage();
+  const out = [header(t('Open boxes — single pairs'), { back: 'boxes', eyebrow: t('Inventory'),
+    sub: esc(t('A box you open is no longer sold as a full box: its pairs are sold one by one, each at its exact landed cost. Pairs are taken from the box opened first.')) })];
+  out.push(panel(t('Open a box'), p.mixes.length ? `<div class="panel-b"><div class="inline"><select id="ob-mix" class="inp">${p.mixes.map(m =>
+      `<option value="${esc(m.source_po_id)}|${esc(m.source_label)}">${esc(m.source_label)} — PO #${esc(Q.poRef(m.source_po_id))} (${esc(t('{n} sealed', { n: m.sealed }))})</option>`).join('')}</select>
+      <button class="btn" data-act="openOnePick">${esc(t('Open one box'))}</button></div></div>` : `<div class="panel-b">${empty(t('No sealed boxes in stock.'))}</div>`));
+  const names = Object.keys(p.matrix).sort();
+  const cell = d => !d ? '<span class="muted">·</span>' : `<span title="${esc(t('{o} in open boxes, {l} loose, {c} on orders not delivered', { o: d.open, l: d.loose, c: d.committed }))}">${fmtNum(d.available)}${d.committed ? `<span class="muted"> (${esc(t('{n} held', { n: d.committed }))})</span>` : ''}</span>`;
+  out.push(panel(t('Pairs available, by colour and size'), names.length
+    ? table([{ h: t('Style · colour') }, ...p.sizes.map(z => ({ h: z, n: true })), { h: t('Total'), n: true }],
+      names.map(n => ({ cells: [`<b>${esc(n)}</b>`, ...p.sizes.map(z => cell(p.matrix[n][z])), `<b>${fmtNum(sum(Object.values(p.matrix[n]), d => d.available))}</b>`] })))
+      + `<p class="sub panel-b">${esc(t('Available = in open boxes + loose pairs, less pairs on orders not yet delivered (“held”).'))}</p>`
+    : `<div class="panel-b">${empty(t('No single pairs available — open a box above.'))}</div>`, { tight: true }));
+  out.push(panel(t('Open boxes'), table([{ h: t('Box') }, { h: t('Mix') }, { h: t('Opened'), cls: 'hide-sm' }, { h: t('What’s left') }, { h: t('Left'), n: true }, { h: '' }],
+    p.boxes.map(b => ({ cells: [`<a class="mono" href="#/box/${esc(b.id)}">${esc(b.box_code)}</a>`,
+      esc(b.source_label || '') + (b.source_po_id ? `<span class="sub">PO #${esc(Q.poRef(b.source_po_id))}</span>` : ''),
+      esc(fmtDate((b.opened_at || '').slice(0, 10))),
+      Object.entries(b.lines).map(([n, zs]) => `<div><b>${esc(n)}</b>: ${zs.map(([z, left]) => `<span class="mono${left === 0 ? ' muted strike' : ''}">${esc(z)}×${fmtNum(left)}</span>`).join(' ')}</div>`).join(''),
+      `<b>${fmtNum(b.left)}</b> / ${fmtNum(b.total)}`,
+      `<div class="rowacts"><a class="btn sm" href="#/box/${esc(b.id)}">${esc(t('Count'))}</a>${b.untouched ? `<button class="btn sm" data-act="reseal" data-id="${esc(b.id)}">${esc(t('Seal again'))}</button>` : ''}</div>`] })),
+    { emptyText: t('No open boxes.') }), { tight: true }));
+  const sold = p.sold.filter(r => r.pairs > 0);
+  out.push(panel(t('Sold as single pairs — last 90 days'), sold.length
+    ? table([{ h: t('Style') }, { h: t('Color') }, { h: t('Size') }, { h: t('Pairs'), n: true }], sold.map(r => ({ cells: [esc(r.name), esc(r.color || '—'), `<span class="mono">${esc(r.size)}</span>`, fmtNum(r.pairs)] })))
+      + `<p class="sub panel-b">${esc(t('Which sizes and colours sell first as single pairs — worth looking at when you choose the size mix of the next order.'))}</p>`
+    : `<div class="panel-b">${empty(t('No single pairs sold yet.'))}</div>`, { tight: true }));
+  return out.join('');
+}
+
 // ---------- invoices ----------
+const canVoid = st => !['paid', 'void', 'unpriced'].includes(st);
 function invoices() {
   const list = all(`SELECT i.*, c.name as customer_name FROM invoices i JOIN orders o ON o.id = i.order_id
                     LEFT JOIN customers c ON c.id = o.customer_id ORDER BY i.issued_at DESC`).map(i => ({ ...i, ...Q.invoiceFinancials(i.id) }));
   const owed = sum(list, i => i.balance_usd);
   const rows = list.map(i => ({ href: `order/${i.order_id}`, cls: i.status === 'void' ? 'void' : '', cells: [
     `<span class="mono">${esc(i.invoice_number)}</span><span class="sub">${esc(fmtDate(i.issued_at))}</span>`, esc(i.customer_name || ''), invPill(i.status),
-    esc(fmtMoney(i.due, i.currency_code)), i.balance > 0.004 ? `<b>${esc(fmtMoney(i.balance, i.currency_code))}</b>` : '<span class="muted">—</span>'] }));
-  return header(t('Invoices'), { sub: `${list.length} · ${esc(t('Customers owe'))} ${esc(fmtUsd(owed))}` })
-    + panel('', table([{ h: t('Invoice') }, { h: t('Customer') }, { h: t('Status'), cls: 'hide-sm' }, { h: t('Total'), n: true, cls: 'hide-sm' }, { h: t('Balance'), n: true }], rows, { emptyText: t('No invoices yet.') }), { tight: true });
+    esc(fmtMoney(i.due, i.currency_code)), i.balance > 0.004 ? `<b>${esc(fmtMoney(i.balance, i.currency_code))}</b>` : '<span class="muted">—</span>',
+    canVoid(i.status) ? `<div class="rowacts"><button class="btn sm danger" data-act="voidInvoice" data-id="${esc(i.id)}">${esc(t('Void invoice'))}</button></div>` : ''] }));
+  return header(t('Invoices'), { sub: `${list.length} · ${esc(t('Customers owe'))} ${esc(fmtUsd(owed))}`, actions: `<button class="btn" data-act="csv" data-k="invoices">${esc(t('Download CSV'))}</button>` })
+    + panel('', table([{ h: t('Invoice') }, { h: t('Customer') }, { h: t('Status'), cls: 'hide-sm' }, { h: t('Total'), n: true, cls: 'hide-sm' }, { h: t('Balance'), n: true }, { h: '' }], rows, { emptyText: t('No invoices yet.') }), { tight: true });
 }
 
-// ---------- parts not rebuilt yet ----------
-const later = title => () => header(title) + panel('', empty(t('Coming in the next stage'), t('This part of the app is being rebuilt. Until then, use your current app for it.')));
 
 export const SCREENS = {
   home: { render: home },
@@ -284,6 +322,7 @@ export const SCREENS = {
   box: { render: box },
   doc: { render: (...a) => renderDoc(...a), mount: () => mountDoc() },
   invoices: { render: invoices },
+  openboxes: { render: openBoxes },
   ...BUY_SCREENS,
   ...PLAN_SCREENS,
   ...MONEY_SCREENS,
@@ -300,4 +339,30 @@ async function showImage() {
   const d = await getBlob('images', el.dataset.img);
   if (d && d.data && document.body.contains(el)) el.innerHTML = `<img src="${d.data}" alt="">`;
 }
-registerActions({ orderStatus: a => { UI.orderStatus = a.dataset.v; schedule(); } });
+registerActions({
+  orderStatus: a => { UI.orderStatus = a.dataset.v; schedule(); },
+  // The old app's CSV exports, same columns (csvdata.js).
+  csv: a => {
+    const d = new Date().toISOString().slice(0, 10), k = a.dataset.k;
+    const make = {
+      products: () => [CSV.productsCsv(), `stock-${d}.csv`], customers: () => [CSV.customersCsv(), `clients-${d}.csv`],
+      suppliers: () => [CSV.suppliersCsv(), `fournisseurs-${d}.csv`], orders: () => [CSV.ordersCsv(), `commandes-${d}.csv`],
+      invoices: () => [CSV.invoicesCsv(), `factures-${d}.csv`], pos: () => [CSV.posCsv(), `bons-de-commande-${d}.csv`],
+      ledger: () => { const cid = /^\d+$/.test(a.dataset.id) ? Number(a.dataset.id) : a.dataset.id;
+        const slug = CSV.customerName(cid).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'client';
+        return [CSV.customerLedgerCsv(cid), `releve-${slug}-${d}.csv`]; }
+    }[k];
+    if (!make) return;
+    const [data, name] = make();
+    downloadText(name, CSV.toCsv(data));
+  },
+  voidInvoice: a => confirmAction({ title: t('Void this invoice?'), text: t('It no longer counts as owed. Payments already recorded on it stay and count towards the order. You can create a new invoice afterwards.'),
+    confirm: t('Yes, void it'), run: () => SO.invoiceVoid(/^\d+$/.test(a.dataset.id) ? Number(a.dataset.id) : a.dataset.id), done: msg => { window.dispatchEvent(new CustomEvent('sl-toast', { detail: msg })); schedule(); } }),
+  openOnePick: () => {
+    const v = ($('#ob-mix') || {}).value || '';
+    const [po, ...rest] = v.split('|'); const label = rest.join('|');
+    if (!label) return;
+    confirmAction({ title: t('Open a box of {l}?', { l: label }), text: t('Its pairs can then be sold one by one; it no longer counts as a sealed box.'), confirm: t('Open a box'), danger: false,
+      run: () => KO.boxOpenOne(/^\d+$/.test(po) ? Number(po) : po, label), done: msg => { if (typeof msg === 'string') window.dispatchEvent(new CustomEvent('sl-toast', { detail: msg })); schedule(); } });
+  }
+});

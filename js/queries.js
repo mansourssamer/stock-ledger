@@ -463,16 +463,21 @@ export function poCostPlan(poId) {
     boxes_in_stock: new Set(items.filter(i => !i.sold).map(i => i.box_id)).size };
 }
 
-// The number shown for an order or purchase order: imported ones keep theirs (#38); ones made
-// in this app continue the count in the order they were made (#39, #40…).
+// The number shown for a record: imported ones keep theirs (#38). Orders and purchase orders
+// made here have the number they were given when made (#39, #40… — it never changes, even if an
+// earlier one is deleted). Other records made here continue the count in the order they were
+// made, which is also the number a backup gives them.
 function seqRef(table, id) {
   if (typeof id === 'number') return id;
   return memo(`ref|${table}|${id}`, () => {
+    const fixed = val(`SELECT number FROM ref_numbers WHERE id = ? AND tbl = ?`, [id, table]);
+    if (fixed) return fixed;
     const base = val(`SELECT COALESCE(MAX(id), 0) FROM "${table}" WHERE typeof(id) = 'integer'`) || 0;
     const rank = val(`SELECT COUNT(*) FROM "${table}" WHERE typeof(id) = 'text' AND id <= ?`, [id]) || 0;
     return base + rank;
   });
 }
+export const refNo = (table, id) => (id === null || id === undefined ? '' : seqRef(table, id));
 export const orderRef = id => seqRef('orders', id);
 export const poRef = id => (id === null || id === undefined ? '' : seqRef('purchase_orders', id));
 

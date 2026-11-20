@@ -108,7 +108,7 @@ export function renderOrder(oidRaw) {
     out.push(panel(`${t('Invoice')} ${i.invoice_number}`, `<div class="panel-b"><div class="kv"><span>${esc(t('Due'))}</span><b>${esc(fmtMoney(i.due, cur))}</b>
       <span>${esc(t('Paid'))}</span><b>${esc(fmtMoney(i.paid, cur))}</b><span>${esc(t('Balance'))}</span><b>${esc(fmtMoney(i.balance, cur))}</b>
       ${i.credit > 0.004 ? `<span>${esc(t('In credit'))}</span><b>${esc(fmtMoney(i.credit, cur))}</b>` : ''}</div></div>${pays}`,
-    { tight: true, actions: `<div class="rowacts">${pill(t(i.status), { paid: 'good', partial: 'warn', unpaid: 'bad' }[i.status] || '')}${payBtn}<a class="btn sm" href="#/doc/invoice/${esc(i.id)}">${esc(t('Print'))}</a></div>` }));
+    { tight: true, actions: `<div class="rowacts">${pill(t(i.status), { paid: 'good', partial: 'warn', unpaid: 'bad' }[i.status] || '')}${payBtn}<a class="btn sm" href="#/doc/invoice/${esc(i.id)}">${esc(t('Print'))}</a>${!['paid', 'void', 'unpriced'].includes(i.status) ? `<button class="btn sm danger" data-act="voidInvoice" data-id="${esc(i.id)}">${esc(t('Void invoice'))}</button>` : ''}</div>` }));
   }
   // returns
   const rets = all(`SELECT r.created_at, r.reason, ri.qty, ri.restocked, ri.refund_amount, ri.order_box_line_id, p.name as product_name, v.size, bl.source_label

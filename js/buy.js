@@ -61,7 +61,7 @@ function purchasing() {
   });
   const transit = all(`SELECT * FROM shipments WHERE status != 'received' ORDER BY eta IS NULL, eta`);
   const out = [header(t('Purchasing'), { sub: `${rows.length} ${esc(plural(rows.length, 'purchase order', 'purchase orders'))}`,
-    actions: `<button class="btn primary" data-act="newPo">+ ${esc(t('New purchase order'))}</button>` }), subnav('purchasing')];
+    actions: `<button class="btn primary" data-act="newPo">+ ${esc(t('New purchase order'))}</button><button class="btn" data-act="csv" data-k="pos">${esc(t('Download CSV'))}</button>` }), subnav('purchasing')];
   if (transit.length) out.push(`<div class="callout">${esc(t('In transit'))}: ${transit.map(s => `<a href="#/shipment/${esc(s.id)}"><b>${esc(s.reference)}</b></a>${s.eta ? ` (${esc(t('ETA'))} ${esc(fmtDate(s.eta))})` : ''}`).join(' · ')}</div>`);
   out.push(panel('', table([{ h: t('Purchase order') }, { h: t('Supplier') }, { h: t('Status'), cls: 'hide-sm' }, { h: t('Goods'), n: true, cls: 'hide-sm' }, { h: t('Landed cost'), n: true }],
     rows.map(r => ({ href: `po/${r.id}`, cells: [`<span class="mono">${esc(poNo(r.id))}</span><span class="sub">${esc(fmtDate(r.created_at))}</span>`,
@@ -238,7 +238,7 @@ async function openDocument(docId) {
 // ---------- suppliers ----------
 function suppliers() {
   const rows = all(`SELECT s.*, (SELECT COUNT(*) FROM purchase_orders po WHERE po.supplier_id = s.id) as po_count FROM suppliers s ORDER BY s.name`);
-  return header(t('Suppliers'), { sub: `${rows.length}`, actions: `<button class="btn primary" data-act="newSupplier">+ ${esc(t('New supplier'))}</button>` }) + subnav('suppliers')
+  return header(t('Suppliers'), { sub: `${rows.length}`, actions: `<button class="btn primary" data-act="newSupplier">+ ${esc(t('New supplier'))}</button><button class="btn" data-act="csv" data-k="suppliers">${esc(t('Download CSV'))}</button>` }) + subnav('suppliers')
     + panel('', table([{ h: t('Name') }, { h: t('Phone'), cls: 'hide-sm' }, { h: t('Purchase orders'), n: true }],
       rows.map(s => ({ href: `supplier/${s.id}`, cells: [`<b>${esc(s.name)}</b><span class="sub">${esc(s.address || '')}</span>`, esc(s.phone || ''), fmtNum(s.po_count)] })),
       { emptyText: t('No suppliers yet.') }), { tight: true });

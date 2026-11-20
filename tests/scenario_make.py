@@ -80,6 +80,14 @@ add('orderAttachBoxes', order='$o4', po_id=po1, label=l1, qty=1, price_per_box=2
 add('orderCreateInvoice', order='$o4')
 add('orderFulfill', order='$o4', credit_ok=1)
 add('invoicePay', invoice='$o4.inv', pay_in_full=1, account_id=acct['id'] if acct else '')
+# order 5: invoiced, the invoice voided, invoiced again and paid in part
+add('orderNew', 'o5', customer_id=c2, currency_code='GNF', notes='Test diff 5')
+add('orderAttachBoxes', order='$o5', po_id=po1, label=l1, qty=1, price_per_box=2400000)
+add('orderCreateInvoice', order='$o5')
+add('invoicePay', invoice='$o5.inv', amount=400000, account_id='', note='Avant annulation')
+add('invoiceVoid', invoice='$o5.inv')
+add('orderCreateInvoice', order='$o5')
+add('invoicePay', invoice='$o5.inv', amount=600000, account_id=acct['id'] if acct else '', note='Après')
 # refusals must change nothing
 add('orderAttachBoxes', order='$o4', po_id=po1, label=l1, qty=99999, price_per_box=1, expect_refusal=1)
 add('orderFulfill', order='$o4', credit_ok=1, expect_refusal=1)
