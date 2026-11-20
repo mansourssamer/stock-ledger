@@ -475,3 +475,23 @@ function seqRef(table, id) {
 }
 export const orderRef = id => seqRef('orders', id);
 export const poRef = id => (id === null || id === undefined ? '' : seqRef('purchase_orders', id));
+
+// app._order_document_lines — box lines described with their styles and size run.
+export function documentLines(orderId) {
+  const items = all(`SELECT oi.*, p.name as product_name, v.color, v.size, v.sku FROM order_items oi JOIN variants v ON v.id = oi.variant_id
+                     JOIN products p ON p.id = v.product_id WHERE oi.order_id = ? AND oi.box_id IS NULL ORDER BY p.name, v.size`, [orderId]);
+  const boxLines = orderBoxLines(orderId).map(l => {
+    const sample = one(`SELECT id FROM boxes WHERE source_po_id IS ? AND source_label = ? LIMIT 1`, [l.source_po_id, l.source_label]);
+    const contents = sample ? boxContents(sample.id) : [];
+    const styles = [], bySize = new Map();
+    for (const c of contents) {
+      const n = c.product_name + (c.color ? ' ' + c.color : '');
+      if (!styles.includes(n)) styles.push(n);
+      bySize.set(c.size, (bySize.get(c.size) || 0) + c.qty);
+    }
+    const run = [...bySize.entries()].sort((a, b) => (String(a[0]).length - String(b[0]).length) || (String(a[0]) < String(b[0]) ? -1 : String(a[0]) > String(b[0]) ? 1 : 0))
+      .map(([s, q]) => `${s}×${q}`).join(', ');
+    return { ...l, styles: styles.join(', ') || l.source_label, size_run: run, gross: l.qty_boxes * l.price_per_box };
+  });
+  return [boxLines, items];
+}

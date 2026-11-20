@@ -38,9 +38,27 @@ pages.append(dict(name='sales-all-month', url='/reports/sales?preset=all&group=m
 pages.append(dict(name='sales-custom', url=f'/reports/sales?start={first_day}&end={today}&group=day', js=['sales', '', first_day, today, 'day']))
 for m in months + [today[:7]]:
     pages.append(dict(name=f'monthly-{m}', url=f'/reports/monthly?month={m}', js=['monthly', m]))
+cc = sqlite3.connect(os.path.join(work, 'erp', 'erp.db'))
+prod = cc.execute("SELECT v.product_id FROM order_items oi JOIN variants v ON v.id = oi.variant_id GROUP BY v.product_id ORDER BY COUNT(*) DESC LIMIT 1").fetchone()
+prod2 = cc.execute("SELECT id FROM products ORDER BY id LIMIT 1").fetchone()
+contacts = [r[0] for r in cc.execute("SELECT id FROM crm_contacts ORDER BY id LIMIT 4")]
+zones = [r[0] for r in cc.execute("SELECT id FROM crm_zones ORDER BY id LIMIT 1")]
+cc.close()
+pages += [dict(name='crm-home', url='/crm', js=['crmHome']), dict(name='crm-customers', url='/crm/customers', js=['crmCustomers', '']),
+          dict(name='crm-customers-regular', url='/crm/customers?group=regular', js=['crmCustomers', 'regular']),
+          dict(name='crm-report', url='/crm/report', js=['crmReport']), dict(name='crm-zones', url='/crm/zones', js=['zonesPage']),
+          dict(name='crm-contacts', url='/crm/contacts', js=['contactRows', {}]), dict(name='crm-contacts-all', url='/crm/contacts?show=all', js=['contactRows', {'show': 'all'}]),
+          dict(name='proformas', url='/proformas', js=['proformasPage'])]
+for p_ in [x for x in (prod, prod2) if x]:
+    pages.append(dict(name=f'announce-{p_[0]}', url=f'/crm/announce?product_id={p_[0]}', js=['announce', {'product_id': p_[0]}]))
+    pages.append(dict(name=f'announce-all-{p_[0]}', url=f'/crm/announce?product_id={p_[0]}&who=bought&who=asked&who=customers&who=prospects', js=['announce', {'product_id': p_[0], 'who': ['bought', 'asked', 'customers', 'prospects']}]))
+if zones:
+    pages.append(dict(name='crm-contacts-zone', url=f'/crm/contacts?zone={zones[0]}', js=['contactRows', {'zone': str(zones[0])}]))
+for k in contacts:
+    pages.append(dict(name=f'crm-contact-{k}', url=f'/crm/contacts/{k}', js=['contactPage', k]))
 pages += [dict(name='partners', url='/partners', js=['partnersPage']), dict(name='accounts', url='/accounts', js=['accountsPage']),
           dict(name='expenses', url='/expenses', js=['expensesPage']), dict(name='currencies', url='/currencies', js=['currenciesPage'])]
-SKIP = {'text', 'mailto', 'whatsapp', 'row_label', 'long_date', 'request', 'session', 'g', 'config', 'get_flashed_messages', 'url_for', 'csv_link', 'print_link',
+SKIP = {'crm', 'products', 'zones', 'text', 'mailto', 'whatsapp', 'row_label', 'long_date', 'request', 'session', 'g', 'config', 'get_flashed_messages', 'url_for', 'csv_link', 'print_link',
         'prev_link', 'next_link', 'partner_emails', 'generated', 'as_of', 'month_name', 'range_label', 'prev_label', 'account_types', 'currencies', 'accounts_choices'}
 def clean(v):
     if isinstance(v, sqlite3.Row): return {k: clean(v[k]) for k in v.keys()}

@@ -14,6 +14,7 @@ import { ACTIONS, registerActions } from './actions.js';
 
 // ---------- icons ----------
 const ICONS = {
+  chat: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M8 11h8M8 14h5"/>',
   home: '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/>',
   receipt: '<path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h4"/>',
   box: '<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>',
@@ -40,10 +41,10 @@ export const UI = { menuOpen: false, gate: { email: '', password: '', err: '', b
 // Groups shown in the side menu; each item: [route, label, icon]. Not-yet-rebuilt parts
 // show a short note pointing back to the current app.
 const NAV = () => [
-  { group: t('Daily'), items: [['home', t('Home'), 'home'], ['orders', t('Sales'), 'receipt'], ['customers', t('Customers'), 'users']] },
+  { group: t('Daily'), items: [['home', t('Home'), 'home'], ['orders', t('Sales'), 'receipt'], ['customers', t('Customers'), 'users'], ['crm', t('CRM'), 'chat']] },
   { group: t('Goods'), items: [['stock', t('Stock'), 'shoe'], ['boxes', t('Inventory'), 'box'], ['purchasing', t('Purchasing'), 'truck']] },
   { group: t('Money'), items: [['invoices', t('Invoices'), 'receipt'], ['money', t('Money'), 'wallet'], ['reports', t('Reports'), 'chart']] },
-  { group: t('More'), items: [['import', t('Import data'), 'upload']] }
+  { group: t('More'), items: [['settings', t('Settings'), 'sliders'], ['import', t('Import data'), 'upload']] }
 ];
 const TABS = () => [['home', t('Home'), 'home'], ['orders', t('Sales'), 'receipt'], ['stock', t('Stock'), 'shoe'], ['customers', t('Customers'), 'users'], ['more', t('More'), 'dots']];
 
@@ -53,8 +54,9 @@ export function route() {
 }
 export const go = path => { location.hash = '#/' + path; };
 const BUY = ['po', 'supplier', 'suppliers', 'shipment', 'shipments', 'location', 'locations', 'unplaced', 'sizeruns', 'pricelist', 'buying', 'events', 'missed'];
+const CRM = ['crmcontacts', 'crmcontact', 'crmcustomers', 'announce', 'crmreport', 'zones', 'proformas'];
 const MONEY = ['account', 'expenses', 'partners', 'partner', 'currencies'], REPORTS = ['pnl', 'cashflow', 'costing', 'balance', 'daily', 'sales', 'monthly'];
-const sectionOf = name => (BUY.includes(name) ? 'purchasing' : MONEY.includes(name) ? 'money' : REPORTS.includes(name) ? 'reports' : { order: 'orders', customer: 'customers', product: 'stock', mix: 'boxes', box: 'boxes', invoice: 'invoices' }[name] || name);
+const sectionOf = name => (CRM.includes(name) ? 'crm' : BUY.includes(name) ? 'purchasing' : MONEY.includes(name) ? 'money' : REPORTS.includes(name) ? 'reports' : { order: 'orders', customer: 'customers', product: 'stock', mix: 'boxes', box: 'boxes', invoice: 'invoices' }[name] || name);
 
 // ---------- rendering ----------
 let renderQueued = false;

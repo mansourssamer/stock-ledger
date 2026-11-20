@@ -14,6 +14,9 @@ import { BUY_SCREENS } from './buy.js';
 import { PLAN_SCREENS } from './plan.js';
 import { MONEY_SCREENS } from './moneypages.js';
 import { REPORT_SCREENS } from './reportpages.js';
+import { CRM_SCREENS } from './crmpages.js';
+import { SETTINGS_SCREENS } from './settings.js';
+import { followUpsToday } from './crmdata.js';
 
 const UI = { stockQ: '', custQ: '', orderQ: '', orderStatus: '' };
 const hasData = () => !!val(`SELECT 1 FROM products LIMIT 1`) || !!val(`SELECT 1 FROM customers LIMIT 1`);
@@ -56,6 +59,12 @@ function home() {
     : `<div class="panel-b">${empty(t('Nothing is low.'))}</div>`;
   out.push(`<div class="grid2">${panel(t('Recent orders'), recent, { tight: true, actions: `<a class="btn sm ghost" href="#/orders">${esc(t('See all'))}</a>` })}
     ${panel(t('Low stock') + (d.low_stock.length ? ` · ${d.low_stock.length}` : ''), lowT, { tight: true })}</div>`);
+  const fu = followUpsToday();
+  if (fu.length) {
+    out.push(panel(t('Follow-ups due'), table([{ h: t('Contact') }, { h: t('Date') }],
+      fu.slice(0, 8).map(k => ({ href: `crmcontact/${k.id}`, cells: [esc(k.name) + (k.follow_up_note ? `<span class="sub">${esc(k.follow_up_note)}</span>` : ''), esc(fmtDate(k.next_follow_up))] }))),
+    { tight: true, actions: `<a class="btn sm ghost" href="#/crm">${esc(t('See all'))}</a>` }));
+  }
   if (d.uninvoiced.length) {
     out.push(panel(t('Delivered, not invoiced'), table([{ h: t('Order') }, { h: t('Customer') }, { h: t('Total'), n: true }],
       d.uninvoiced.map(o => ({ href: `order/${o.id}`, cells: [`<span class="mono">${orderNo(o.id)}</span>`, esc(o.customer_name || ''), esc(fmtMoney(o.order_total, o.currency_code))] }))), { tight: true }));
@@ -217,7 +226,7 @@ function customer(id) {
     e.charge ? esc(fmtMoney(e.charge, e.currency_code)) : '', e.payment ? esc(fmtMoney(e.payment, e.currency_code)) : '', esc(fmtMoney(e.balance, e.currency_code))] }));
   const buyRows = buying.map(b => ({ cells: [esc(b.source_label), fmtNum(b.boxes), esc(fmtMoney(b.avg_price, b.currency_code)), esc(fmtDate(b.last_bought))] }));
   return header(c.name, { back: 'customers', sub: esc([c.phone, c.address].filter(Boolean).join(' · ')),
-      actions: `<button class="btn primary" data-act="newOrder" data-c="${esc(cid)}">+ ${esc(t('New order'))}</button>${s.outstanding_usd > 0.004 ? `<button class="btn" data-act="payCustomer" data-id="${esc(cid)}">${esc(t('Record a payment'))}</button>` : ''}<a class="btn" href="#/doc/statement/${esc(cid)}">${esc(t('Statement'))}</a><button class="btn ghost" data-act="editCustomer" data-id="${esc(cid)}">${esc(t('Edit'))}</button><button class="btn ghost danger" data-act="delCustomer" data-id="${esc(cid)}">${esc(t('Delete'))}</button>` })
+      actions: `<button class="btn primary" data-act="newOrder" data-c="${esc(cid)}">+ ${esc(t('New order'))}</button>${s.outstanding_usd > 0.004 ? `<button class="btn" data-act="payCustomer" data-id="${esc(cid)}">${esc(t('Record a payment'))}</button>` : ''}<a class="btn" href="#/doc/statement/${esc(cid)}">${esc(t('Statement'))}</a>${(() => { const k = one(`SELECT id FROM crm_contacts WHERE customer_id = ?`, [cid]); return k ? `<a class="btn" href="#/crmcontact/${esc(k.id)}">CRM</a>` : ''; })()}<button class="btn ghost" data-act="editCustomer" data-id="${esc(cid)}">${esc(t('Edit'))}</button><button class="btn ghost danger" data-act="delCustomer" data-id="${esc(cid)}">${esc(t('Delete'))}</button>` })
     + tiles([
       tile(t('Owes'), fmtShort(s.outstanding_usd), s.days_outstanding !== null ? esc(t('oldest unpaid: {n} days', { n: s.days_outstanding })) : '', '', s.outstanding_usd > 0.004 ? 'neg' : ''),
       tile(t('Lifetime sales'), fmtShort(s.lifetime_sold_usd), `${s.invoice_count} ${esc(plural(s.invoice_count, 'invoice', 'invoices'))}`),
@@ -279,6 +288,8 @@ export const SCREENS = {
   ...PLAN_SCREENS,
   ...MONEY_SCREENS,
   ...REPORT_SCREENS,
+  ...CRM_SCREENS,
+  ...SETTINGS_SCREENS,
   import: importScreen
 };
 

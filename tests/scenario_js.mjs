@@ -10,6 +10,7 @@ const S = await import('../js/ops/sales.js');
 const K = await import('../js/ops/stock.js');
 const P = await import('../js/ops/purchasing.js');
 const F = await import('../js/ops/finance.js');
+const C = await import('../js/ops/crm.js');
 await L.openLocal(require('sql.js'), require.resolve('sql.js/dist/sql-wasm.wasm'));
 const [, , dbIn, scenPath, dbOut] = process.argv;
 const src = L.openBytes(fs.readFileSync(dbIn));
@@ -47,6 +48,8 @@ function res(v) {
     if (sub === 'line0') return val(`SELECT id FROM assortment_lines WHERE assortment_id = ? ORDER BY id LIMIT 1`, [base]);
     if (sub === 'tg_last') return val(`SELECT transfer_group FROM cash_transactions WHERE account_id = ? AND transfer_group IS NOT NULL ORDER BY id DESC LIMIT 1`, [base]);
     if (sub === 'entry_last') return val(`SELECT id FROM partner_ledger WHERE partner_id = ? ORDER BY id DESC LIMIT 1`, [base]);
+    if (sub === 'customer') return val(`SELECT customer_id FROM crm_contacts WHERE id = ?`, [base]);
+    if (sub === 'act_last') return val(`SELECT id FROM crm_activities WHERE contact_id = ? ORDER BY id DESC LIMIT 1`, [base]);
   }
   if (typeof v === 'string' && v.includes('$')) { const i = v.indexOf('$'); const r = res(v.slice(i)); return r === null || r === undefined ? null : v.slice(0, i) + r; }
   return v;
@@ -150,6 +153,24 @@ for (const step of JSON.parse(fs.readFileSync(scenPath))) {
       case 'expenseEdit': F.expenseEdit(a.expense, { ...a, paid_from: a.paid_from ?? '' }); break;
       case 'expenseDelete': F.expenseDelete(a.expense); break;
       case 'costCorrectionsFix': F.costCorrectionsFix(); break;
+      // CRM and proformas
+      case 'crmVisit': C.crmReady(); break;
+      case 'contactNew': C.crmReady(); C.contactNew(a); break;
+      case 'contactEdit': C.contactEdit(a.contact, a); break;
+      case 'contactStage': C.contactStage(a.contact, a); break;
+      case 'activityAdd': C.activityAdd(a.contact, a); break;
+      case 'activityDelete': C.activityDelete(a.activity); break;
+      case 'followUp': C.followUp(a.contact, a); break;
+      case 'whatsappSent': C.whatsappSent(a.contact, a); break;
+      case 'makeCustomer': C.makeCustomer(a.contact); break;
+      case 'contactArchive': C.contactArchive(a.contact); break;
+      case 'contactDelete': C.contactDelete(a.contact); break;
+      case 'zoneNew': C.zoneNew(a); break;
+      case 'zoneEdit': C.zoneEdit(a.zone, a); break;
+      case 'zoneToggle': C.zoneToggle(a.zone); break;
+      case 'zoneDelete': C.zoneDelete(a.zone); break;
+      case 'proformaCreate': C.proformaCreate(a.order, a); break;
+      case 'proformaVoid': C.proformaVoid(a.proforma); break;
       default: throw new Error('unknown op ' + step.op);
     }
     const touched = L.commitLocal();
@@ -160,7 +181,7 @@ for (const step of JSON.parse(fs.readFileSync(scenPath))) {
     ok = false; err = e.message;
   }
   if (step.save) {
-    const table = { c: 'customers', p: 'products', v: 'variants', o: 'orders', sup: 'suppliers', po: 'purchase_orders', as: 'assortments', loc: 'locations', sh: 'shipments', acc: 'cash_accounts', pt: 'partners', rt: 'exchange_rates', ex: 'expenses', dist: 'distributions' }[step.save.match(/^[a-z]+/)[0]];
+    const table = { c: 'customers', p: 'products', v: 'variants', o: 'orders', sup: 'suppliers', po: 'purchase_orders', as: 'assortments', loc: 'locations', sh: 'shipments', acc: 'cash_accounts', pt: 'partners', rt: 'exchange_rates', ex: 'expenses', dist: 'distributions', k: 'crm_contacts', z: 'crm_zones', pf: 'proformas' }[step.save.match(/^[a-z]+/)[0]];
     names[step.save] = val(`SELECT id FROM "${table}" ORDER BY id DESC LIMIT 1`);
     void result;
   }

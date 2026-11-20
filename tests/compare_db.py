@@ -15,7 +15,7 @@ REF = {'customer_id': 'customers', 'order_id': 'orders', 'sold_order_id': 'order
        'po_box_group_id': 'po_box_groups', 'shipment_id': 'shipments', 'location_id': 'locations', 'from_location_id': 'locations',
        'to_location_id': 'locations', 'parent_id': 'locations', 'supplier_id': 'suppliers', 'partner_id': 'partners',
        'cash_transaction_id': 'cash_transactions', 'distribution_id': 'distributions', 'contact_id': 'crm_contacts', 'zone_id': 'crm_zones',
-       'assortment_id': 'assortments', 'distribution_id': 'distributions'}
+       'assortment_id': 'assortments', 'distribution_id': 'distributions', 'contact_id': 'crm_contacts', 'zone_id': 'crm_zones'}
 REFTYPE = {'partner': 'partners', 'order': 'orders', 'purchase_order': 'purchase_orders', 'invoice_payment': 'invoice_payments', 'box_count': 'boxes', 'expense': 'expenses',
            'po_cost': 'po_costs', 'partner_ledger': 'partner_ledger', 'distribution': 'distributions'}
 ts = re.compile(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$')
@@ -44,10 +44,24 @@ def tr(table, col, v, row):
     if col == 'id': ref = table
     if ref and isinstance(v, str): return idmap.get((ref, v), ('UNMAPPED', ref, v))
     return v
-def norm(v):
+import json as _json
+def norm(v, col=''):
+    if col.endswith('_json') and isinstance(v, str):
+        try: return _json.loads(v)
+        except ValueError: return v
     if isinstance(v, str) and ts.match(v): return v[:10]
     if isinstance(v, float) and v.is_integer(): return int(v)
     if isinstance(v, float): return round(v, 9)
+    return v
+def jnorm(v):
+    if isinstance(v, dict): return {k: jnorm(x) for k, x in v.items()}
+    if isinstance(v, list): return [jnorm(x) for x in v]
+    if isinstance(v, float) and v.is_integer(): return int(v)
+    if isinstance(v, float): return round(v, 9)
+    return v
+def tr_json(v):   # ids inside proforma lines
+    if isinstance(v, list): return [tr_json(x) for x in v]
+    if isinstance(v, dict): return {k: (idmap.get((REF[k], x), x) if k in REF and isinstance(x, str) else tr_json(x)) for k, x in v.items()}
     return v
 checked = 0
 for t in tables:
@@ -62,7 +76,8 @@ for t in tables:
     for k in set(arows) & set(brows):
         ra, rb = arows[k], brows[k]
         for c in cols:
-            va, vb = norm(ra[c]), norm(tr(t, c, rb[c], rb))
+            va, vb = norm(ra[c], c), norm(tr(t, c, rb[c], rb), c)
+            if c.endswith('_json'): va, vb = jnorm(va), jnorm(tr_json(vb))
             checked += 1
             if isinstance(vb, tuple) and vb[0] == 'UNMAPPED' and isinstance(va, int) and va > maxid.get(vb[1], 0) \
                     and not A.execute(f'SELECT 1 FROM "{vb[1]}" WHERE id = ?', (va,)).fetchone() \

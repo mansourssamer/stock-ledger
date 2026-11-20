@@ -77,8 +77,8 @@ export function openForm(opts) {
 export const closeForm = () => { current = null; draw(); };
 
 // A yes/no question for something that can't be undone easily.
-export function confirmAction({ title, text, confirm, danger = true, run }) {
-  openForm({ title, intro: esc(text), fields: [], submit: confirm, danger, run });
+export function confirmAction({ title, text, confirm, danger = true, run, done }) {
+  openForm({ title, intro: esc(text), fields: [], submit: confirm, danger, run, done });
 }
 
 async function submit() {

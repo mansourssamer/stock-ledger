@@ -7,6 +7,8 @@ const L = await import('../js/localdb.js');
 const { TABLES } = await import('../js/schema.js');
 const R = await import('../js/reports.js');
 let M = {};
+const CR = await import('../js/crmdata.js');
+const CO = await import('../js/ops/crm.js');
 try { M = await import('../js/moneydata.js'); } catch (e) { if (!/Cannot find module/.test(e.message)) throw e; }
 await L.openLocal(require('sql.js'), require.resolve('sql.js/dist/sql-wasm.wasm'));
 const [, , dbIn, specPath] = process.argv;
@@ -32,6 +34,14 @@ for (const p of JSON.parse(fs.readFileSync(specPath))) {
   else if (fn === 'dailyReport') v = { rep: R.dailyReport(a[0]) };
   else if (fn === 'sales') { const [s, e, g, preset] = R.salesRange(...a); v = { rep: R.salesReport(s, e, g), preset }; }
   else if (fn === 'monthly') { const [y, m] = a[0].split('-').map(Number); v = { rep: R.monthlyReport(y, m) }; }
+  else if (CR[fn]) {
+    if (fn === 'crmHome' && !globalThis.__synced) { L.begin(); CO.crmReady(); L.commitLocal(); globalThis.__synced = 1; }
+    v = CR[fn](...a);
+    if (fn === 'crmHome' || fn === 'crmCustomers') v = { ...v, ...(v.to_call ? {} : {}) };
+    if (fn === 'contactRows') v = { contacts: v };
+    if (fn === 'crmCustomers' && v.rows) v = v;
+    if (fn === 'contactPage' && v) v = { ...v, k: v.k };
+  }
   else if (M[fn]) v = M[fn]();
   else continue;
   out[p.name] = plain(v);

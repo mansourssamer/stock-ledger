@@ -1,0 +1,58 @@
+"""Builds a CRM and proforma scenario from a database: zones, contacts, activities, follow-ups,
+stages, a prospect becoming a customer, proformas on an open order, and the automatic stage
+updates when the CRM opens.   python3 tests/scenario_make_crm.py erp.db > scenario.json
+Saved names: k* contacts, z* zones, o* orders, pf* proformas. "$k9.customer" = the contact's customer,
+"$k9.act_last" = its last activity."""
+import json, sqlite3, sys, datetime
+c = sqlite3.connect(sys.argv[1]); c.row_factory = sqlite3.Row
+today = datetime.datetime.now(datetime.timezone.utc).date()
+d = lambda n: (today - datetime.timedelta(days=n)).isoformat()
+mix = c.execute("""SELECT source_po_id, source_label FROM boxes WHERE status = 'in_stock' GROUP BY source_po_id, source_label
+                   HAVING COUNT(*) >= 2 ORDER BY COUNT(*) DESC, source_label LIMIT 1""").fetchone()
+S = []
+add = lambda op, save=None, **args: S.append(dict(op=op, args=args, **({'save': save} if save else {})))
+add('crmVisit')
+add('zoneNew', 'z9', name='Marché test diff', area='Conakry')
+add('zoneNew', name='marché TEST diff', area='Conakry', expect_refusal=1)
+add('zoneEdit', zone='$z9', name='Marché test diff (édité)', area='Conakry')
+add('zoneToggle', zone='$z9')
+add('zoneToggle', zone='$z9')
+add('zoneNew', 'z8', name='Zone à supprimer')
+add('zoneDelete', zone='$z8')
+add('contactNew', 'k9', name='Prospect test diff', kind='retailer', zone_id='$z9', phone='620 11 22 33', potential_boxes='12', sells='Baskets', stage='contacted', notes='Vu au marché')
+add('contactNew', name='', expect_refusal=1)
+add('contactEdit', contact='$k9', name='Prospect test diff', kind='wholesaler', zone_id='$z9', phone='620 11 22 33', whatsapp='00224 621 00 00 00', potential_boxes='20', suppliers='Guangzhou')
+add('zoneDelete', zone='$z9', expect_refusal=1)
+add('activityAdd', contact='$k9', kind='call', happened_on=d(1), note='Intéressé', next_follow_up=d(-3), follow_up_note='Rappeler')
+add('activityAdd', contact='$k9', kind='samples', note='Échantillons')
+add('activityAdd', contact='$k9', kind='note', happened_on=d(-2), expect_refusal=1)
+add('activityAdd', contact='$k9', kind='visit', note='À effacer')
+add('activityDelete', activity='$k9.act_last')
+add('followUp', contact='$k9', next_follow_up=d(-7), follow_up_note='Relancer')
+add('followUp', contact='$k9', done=1)
+add('whatsappSent', contact='$k9', note='Annonce : nouvel arrivage')
+add('contactStage', contact='$k9', stage='lost', lost_reason='Prix')
+add('contactStage', contact='$k9', stage='bogus', expect_refusal=1)
+add('contactStage', contact='$k9', stage='contacted')
+add('makeCustomer', contact='$k9')
+add('orderNew', 'o9', customer_id='$k9.customer', currency_code='GNF', notes='Commande prospect')
+if mix:
+    add('orderAttachBoxes', order='$o9', po_id=mix['source_po_id'], label=mix['source_label'], qty=1, price_per_box=2500000)
+add('proformaCreate', order='$o9', terms='Paiement à la commande')
+add('proformaCreate', 'pf9', order='$o9', issued_on=d(1), valid_until=d(-10), terms='Validité 10 jours')
+add('proformaCreate', order='$o9', valid_until=d(5), expect_refusal=1)
+add('proformaVoid', proforma='$pf9')
+add('crmVisit')
+add('orderFulfill', order='$o9', credit_ok=1)
+add('proformaCreate', order='$o9', expect_refusal=1)
+add('crmVisit')
+add('orderNew', 'o8', customer_id='$k9.customer', currency_code='USD')
+add('proformaCreate', order='$o8', expect_refusal=1)
+add('contactNew', 'k8', name='À supprimer', kind='other')
+add('contactDelete', contact='$k8')
+add('contactDelete', contact='$k9', expect_refusal=1)
+add('contactArchive', contact='$k9')
+add('contactArchive', contact='$k9')
+add('customerEdit', customer='$k9.customer', name='Client issu du CRM', phone='+224 622 00 00 00', discount_percent=0, credit_limit='', credit_currency='GNF')
+add('crmVisit')
+print(json.dumps(S, ensure_ascii=False, indent=1))

@@ -11,6 +11,7 @@ export const isReady = () => !!DB;
 
 // Opens another database file (the old app's erp.db, for the importer).
 export const openBytes = bytes => new SQLMOD.Database(bytes);
+export const newDatabase = () => new SQLMOD.Database();
 // Runs fn with queries pointed at another database, then switches back.
 export function withDb(other, fn) {
   const keep = DB;

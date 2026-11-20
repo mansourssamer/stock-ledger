@@ -13,6 +13,7 @@ import { registerActions } from './actions.js';
 import { go, schedule } from './app.js';
 import { putBlob } from './store.js';
 import { shrinkImage } from './images.js';
+import { orderProformas } from './crmpages.js';
 
 const toast = m => window.dispatchEvent(new CustomEvent('sl-toast', { detail: m }));
 const id = v => asId(v);
@@ -115,6 +116,8 @@ export function renderOrder(oidRaw) {
                     LEFT JOIN order_box_lines bl ON bl.id = ri.order_box_line_id WHERE r.order_id = ? ORDER BY r.created_at DESC`, [oid]);
   if (rets.length) out.push(panel(t('Returns'), table([{ h: t('Date') }, { h: '' }, { h: t('Credited'), n: true }],
     rets.map(r => ({ cells: [esc(fmtDate(r.created_at)), esc(r.order_box_line_id ? `${r.qty} × ${r.source_label}` : `${r.qty} × ${r.product_name} ${r.size}`) + `<span class="sub">${esc(r.restocked ? t('back in stock') : t('written off'))}${r.reason ? ' · ' + esc(r.reason) : ''}</span>`, esc(fmtMoney(r.refund_amount, cur))] }))), { tight: true }));
+  // proformas
+  out.push(orderProformas(oid, open));
   // the rest
   const more = [];
   if (!live && total > 0.004 && !cancelled) more.push(`<button class="btn" data-act="makeInvoice" data-id="${esc(oid)}">${esc(t('Create the invoice'))}</button>`);

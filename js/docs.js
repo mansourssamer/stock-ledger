@@ -2,33 +2,16 @@
 // Shown inside the app with a Print button (print or save as PDF from the phone's share sheet).
 import { all, one } from './localdb.js';
 import * as Q from './queries.js';
+import { documentLines } from './queries.js';
 import { withLang } from './i18n.js';
 import { esc, fmtMoney, fmtUsd, fmtDate, sum } from './util.js';
 import { getBlob } from './store.js';
 import { priceList } from './buy.js';
+import { proformaDoc } from './crmpages.js';
 
 const day = s => { const d = String(s || '').slice(0, 10).split('-'); return d.length === 3 ? `${d[2]}/${d[1]}/${d[0]}` : String(s || ''); };
 const STATUS = { paid: 'Payée', partial: 'Partiellement payée', unpaid: 'Impayée', void: 'Annulée', unpriced: 'Sans prix' };
 
-// app._order_document_lines — box lines described with their styles and size run.
-function documentLines(orderId) {
-  const items = all(`SELECT oi.*, p.name as product_name, v.color, v.size, v.sku FROM order_items oi JOIN variants v ON v.id = oi.variant_id
-                     JOIN products p ON p.id = v.product_id WHERE oi.order_id = ? AND oi.box_id IS NULL ORDER BY p.name, v.size`, [orderId]);
-  const boxLines = Q.orderBoxLines(orderId).map(l => {
-    const sample = one(`SELECT id FROM boxes WHERE source_po_id IS ? AND source_label = ? LIMIT 1`, [l.source_po_id, l.source_label]);
-    const contents = sample ? Q.boxContents(sample.id) : [];
-    const styles = [], bySize = new Map();
-    for (const c of contents) {
-      const n = c.product_name + (c.color ? ' ' + c.color : '');
-      if (!styles.includes(n)) styles.push(n);
-      bySize.set(c.size, (bySize.get(c.size) || 0) + c.qty);
-    }
-    const run = [...bySize.entries()].sort((a, b) => (String(a[0]).length - String(b[0]).length) || (String(a[0]) < String(b[0]) ? -1 : String(a[0]) > String(b[0]) ? 1 : 0))
-      .map(([s, q]) => `${s}×${q}`).join(', ');
-    return { ...l, styles: styles.join(', ') || l.source_label, size_run: run, gross: l.qty_boxes * l.price_per_box };
-  });
-  return [boxLines, items];
-}
 
 function invoiceDoc(invoiceId) {
   const inv = one(`SELECT i.*, o.id as order_id, c.name as customer_name, c.email as customer_email, c.phone as customer_phone, c.address as customer_address
@@ -101,8 +84,12 @@ export async function mountDoc() {
 }
 
 export function renderDoc(kind, idRaw) {
-  if (kind === 'pricelist') return `<div class="docbar"><a class="backlink" href="#/pricelist">‹ Retour</a><button class="btn primary" onclick="window.print()">Imprimer / PDF</button></div><div class="doc">${withLang('fr', priceListDoc)}</div>`;
   const id = /^\d+$/.test(idRaw) ? Number(idRaw) : idRaw;
+  if (kind === 'proforma') {
+    const pf = one(`SELECT order_id FROM proformas WHERE id = ?`, [id]);
+    return `<div class="docbar"><a class="backlink" href="#/${pf && pf.order_id !== null ? 'order/' + esc(pf.order_id) : 'proformas'}">‹ Retour</a><button class="btn primary" onclick="window.print()">Imprimer / PDF</button></div><div class="doc">${proformaDoc(id)}</div>`;
+  }
+  if (kind === 'pricelist') return `<div class="docbar"><a class="backlink" href="#/pricelist">‹ Retour</a><button class="btn primary" onclick="window.print()">Imprimer / PDF</button></div><div class="doc">${withLang('fr', priceListDoc)}</div>`;
   const back = kind === 'invoice' ? `order/${(one(`SELECT order_id FROM invoices WHERE id = ?`, [id]) || {}).order_id}` : `customer/${id}`;
   const body = withLang('fr', () => kind === 'invoice' ? invoiceDoc(id) : statementDoc(id));
   return `<div class="docbar"><a class="backlink" href="#/${esc(back)}">‹ Retour</a><button class="btn primary" onclick="window.print()">Imprimer / PDF</button></div><div class="doc">${body}</div>`;

@@ -57,13 +57,15 @@ def res(v):
         if sub == 'line0': return val("SELECT id FROM assortment_lines WHERE assortment_id = ? ORDER BY id LIMIT 1", base)
         if sub == 'tg_last': return val("SELECT transfer_group FROM cash_transactions WHERE account_id = ? AND transfer_group IS NOT NULL ORDER BY id DESC LIMIT 1", base)
         if sub == 'entry_last': return val("SELECT id FROM partner_ledger WHERE partner_id = ? ORDER BY id DESC LIMIT 1", base)
+        if sub == 'customer': return val("SELECT customer_id FROM crm_contacts WHERE id = ?", base)
+        if sub == 'act_last': return val("SELECT id FROM crm_activities WHERE contact_id = ? ORDER BY id DESC LIMIT 1", base)
     if isinstance(v, str) and '$' in v:
         pre, _, ref = v.partition('$')
         r = res('$' + ref)
         return None if r is None else f"{pre}{r}"
     return v
 
-CHECKBOXES = {'restock', 'credit_ok', 'pay_in_full', 'remove_image', 'confirm', 'is_actual', 'archived', 'restamp', 'override'}
+CHECKBOXES = {'restock', 'credit_ok', 'pay_in_full', 'remove_image', 'confirm', 'is_actual', 'archived', 'restamp', 'override', 'done', 'clear_follow_up'}
 def form(args, *keys):
     out = {}
     for k in keys:
@@ -171,13 +173,33 @@ for step in json.load(open(scen_path)):
     elif op == 'expenseEdit': post(f"/expenses/{res(a['expense'])}/edit", {**form(a, 'category', 'description', 'amount', 'currency_code', 'expense_date'), 'paid_from': str(res(a.get('paid_from', '')) or '')})
     elif op == 'expenseDelete': post(f"/expenses/{res(a['expense'])}/delete", {})
     elif op == 'costCorrectionsFix': post('/reports/cost-corrections/fix', {})
+    # CRM and proformas
+    elif op == 'crmVisit':
+        r = client.get('/crm'); assert r.status_code == 200, r.status_code
+    elif op == 'contactNew': post('/crm/contacts/new', form(a, 'name', 'kind', 'zone_id', 'phone', 'whatsapp', 'email', 'address', 'sells', 'potential_boxes', 'suppliers', 'source', 'notes', 'stage'))
+    elif op == 'contactEdit': post(f"/crm/contacts/{res(a['contact'])}/edit", form(a, 'name', 'kind', 'zone_id', 'phone', 'whatsapp', 'email', 'address', 'sells', 'potential_boxes', 'suppliers', 'source', 'notes'))
+    elif op == 'contactStage': post(f"/crm/contacts/{res(a['contact'])}/stage", form(a, 'stage', 'lost_reason'))
+    elif op == 'activityAdd': post(f"/crm/contacts/{res(a['contact'])}/activity", form(a, 'kind', 'happened_on', 'note', 'next_follow_up', 'follow_up_note', 'clear_follow_up'))
+    elif op == 'activityDelete': post(f"/crm/activities/{res(a['activity'])}/delete", {})
+    elif op == 'followUp': post(f"/crm/contacts/{res(a['contact'])}/follow-up", form(a, 'done', 'next_follow_up', 'follow_up_note'))
+    elif op == 'whatsappSent': post(f"/crm/contacts/{res(a['contact'])}/whatsapp-sent", form(a, 'note'))
+    elif op == 'makeCustomer': post(f"/crm/contacts/{res(a['contact'])}/customer", {})
+    elif op == 'contactArchive': post(f"/crm/contacts/{res(a['contact'])}/archive", {})
+    elif op == 'contactDelete': post(f"/crm/contacts/{res(a['contact'])}/delete", {})
+    elif op == 'zoneNew': post('/crm/zones/new', form(a, 'name', 'area'))
+    elif op == 'zoneEdit': post(f"/crm/zones/{res(a['zone'])}/edit", form(a, 'name', 'area'))
+    elif op == 'zoneToggle': post(f"/crm/zones/{res(a['zone'])}/toggle", {})
+    elif op == 'zoneDelete': post(f"/crm/zones/{res(a['zone'])}/delete", {})
+    elif op == 'proformaCreate': post(f"/orders/{res(a['order'])}/proforma", form(a, 'issued_on', 'valid_until', 'terms'))
+    elif op == 'proformaVoid': post(f"/proformas/{res(a['proforma'])}/void", {})
     else: raise SystemExit('unknown op ' + op)
     changed = checksum() != before
     if step.get('save'):
         import re as _re
         table = {'c': 'customers', 'p': 'products', 'v': 'variants', 'o': 'orders', 'sup': 'suppliers', 'po': 'purchase_orders',
                  'as': 'assortments', 'loc': 'locations', 'sh': 'shipments',
-                 'acc': 'cash_accounts', 'pt': 'partners', 'rt': 'exchange_rates', 'ex': 'expenses', 'dist': 'distributions'}[_re.match('[a-z]+', step['save']).group(0)]
+                 'acc': 'cash_accounts', 'pt': 'partners', 'rt': 'exchange_rates', 'ex': 'expenses', 'dist': 'distributions',
+                 'k': 'crm_contacts', 'z': 'crm_zones', 'pf': 'proformas'}[_re.match('[a-z]+', step['save']).group(0)]
         names[step['save']] = val(f'SELECT MAX(id) FROM "{table}"')
     log.append({'op': op, 'ok': changed})
 # The app keeps recent changes in a WAL file: copy through SQLite so they're included.
