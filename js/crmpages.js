@@ -139,7 +139,7 @@ function crmreport() {
       tile(t('Potential'), fmtNum(p.potential), esc(t('boxes per order, prospects and customers'))), tile(t('Sold in 30 days'), fmtNum(p.sold_30), esc(t('boxes · goal {g} (a container)', { g: p.goal })))])
     + panel(t('From prospect to customer'), `<div class="panel-b"><div class="bars">${p.stages.map(s => `<div class="bar-row"><span>${esc(lab(C.STAGES, s))}</span><b>${p.funnel[s]}</b>
       <div class="bar-track"><div class="bar-fill" style="width:${(p.funnel[s] / max * 100).toFixed(1)}%"></div></div></div>`).join('')}</div>
-      ${p.avg_wait !== null ? `<p class="sub mtop">${esc(t('On average {n} days from adding a prospect to their first order.', { n: Math.round(p.avg_wait) }))}</p>` : ''}</div>`)
+      ${p.avg_wait !== null ? `<p class="sub gap-t">${esc(t('On average {n} days from adding a prospect to their first order.', { n: Math.round(p.avg_wait) }))}</p>` : ''}</div>`)
     + panel(t('By zone'), table([{ h: t('Zone') }, { h: t('Contacts'), n: true }, { h: t('Customers'), n: true }, { h: t('Potential'), n: true, cls: 'hide-sm' }],
       p.by_zone.map(z => ({ cells: [esc(z.name || '—') + (z.area ? `<span class="sub">${esc(z.area)}</span>` : ''), fmtNum(z.total), fmtNum(z.stages.first_order + z.stages.regular), fmtNum(z.potential)] })), { emptyText: '—' }), { tight: true })
     + `<div class="grid2">${panel(t('By kind'), table([{ h: t('Kind') }, { h: t('Contacts'), n: true }, { h: t('Customers'), n: true }],

@@ -11,7 +11,7 @@ function fromBase64(s) {
   return b;
 }
 // The whole backup as a .zip Blob, with a summary for the screen.
-export async function makeBackupZip(onProgress = () => {}) {
+export async function makeBackupZip(onProgress = () => {}, prefix = 'erp-backup') {
   const db = buildBackupDb();
   const zip = new window.JSZip();
   zip.file('erp.db', db.bytes);
@@ -34,7 +34,7 @@ export async function makeBackupZip(onProgress = () => {}) {
   zip.file('README.txt', `Stock & Ledger backup\nMade: ${now.slice(0, 16).replace('T', ' ')} UTC\nerp.db = all your data; uploads/ = product photos and documents.\n`
     + `To put it back: in the new app, Import data; in the old app, Backup page -> Restore.\n`);
   const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-  const name = `erp-backup-${now.slice(0, 10)}_${now.slice(11, 19).replace(/:/g, '')}.zip`;
+  const name = `${prefix}-${now.slice(0, 10)}_${now.slice(11, 19).replace(/:/g, '')}.zip`;
   return { blob, name, rows: db.rows, renumbered: db.renumbered, conflicts: db.conflicts, photos: photos.length, documents: docs.length, missing };
 }
 export const backupSummary = r => t('{r} records, {p} photos, {d} documents.', { r: r.rows, p: r.photos - (r.missingPhotos || 0), d: r.documents });

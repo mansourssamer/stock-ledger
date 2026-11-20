@@ -102,6 +102,22 @@ const FR = {
   'This app already has data. Importing replaces all of it with the backup.': 'Cette application contient déjà des données. L’import les remplace toutes par la sauvegarde.',
   'Too large to keep (over 700 KB), so it stays in your old app:': 'Trop lourd (plus de 700 Ko), il reste dans votre ancienne application :',
   'Firebase writes needed': 'Écritures Firebase nécessaires', 'Free limit per day': 'Limite gratuite par jour',
-  'Key figures': 'Chiffres clés', 'Old app': 'Ancienne appli', 'New app': 'Nouvelle appli'
+  'Key figures': 'Chiffres clés', 'Old app': 'Ancienne appli', 'New app': 'Nouvelle appli',
+  // switching over: what an import changes, and a copy of this app first
+  'What changes in this app': 'Ce qui change dans cette application', 'Records added': 'Enregistrements ajoutés',
+  'Records changed': 'Enregistrements modifiés', 'Records removed': 'Enregistrements supprimés',
+  'Newest entry in this backup': 'Saisie la plus récente dans la sauvegarde', 'Newest imported entry in this app': 'Saisie importée la plus récente dans l’application',
+  'This backup is older than the data already in this app. Check that you chose the newest backup from your old app.': 'Cette sauvegarde est plus ancienne que les données déjà dans l’application. Vérifiez que vous avez choisi la sauvegarde la plus récente de votre ancienne application.',
+  '{n} record(s) were entered in this app and are not in this backup:': '{n} enregistrement(s) ont été saisis dans cette application et ne sont pas dans cette sauvegarde :',
+  'Importing removes them. Download a copy of this app first, so you can get them back if you need to.': 'L’import les supprime. Téléchargez d’abord une copie de l’application, pour pouvoir les récupérer si besoin.',
+  'Download a copy of this app first': 'Télécharger d’abord une copie de l’application', 'Download the copy above first.': 'Téléchargez d’abord la copie ci-dessus.',
+  'Preparing the copy… {d} of {n} files': 'Préparation de la copie… {d} fichiers sur {n}', 'Copy saved: {f}': 'Copie enregistrée : {f}',
+  'The copy couldn’t be made: {e}': 'La copie n’a pas pu être faite : {e}', 'From now on': 'À partir de maintenant',
+  'Enter new sales, payments and purchases only in this app. Keep your old app as it is for a few weeks in case you need to look something up, but don’t enter anything there any more, or the two will no longer agree.': 'Saisissez les nouvelles ventes, paiements et achats uniquement dans cette application. Gardez l’ancienne application telle quelle quelques semaines pour consulter si besoin, mais n’y saisissez plus rien, sinon les deux ne correspondront plus.',
+  'Go to the home page': 'Aller à l’accueil', 'Import another backup': 'Importer une autre sauvegarde',
+  'orders': 'commandes', 'order lines': 'lignes de commande', 'box lines': 'lignes de cartons', 'payments': 'paiements', 'customers': 'clients',
+  'returns': 'retours', 'returned items': 'articles retournés', 'box contents': 'contenus de cartons', 'purchase order lines': 'lignes de bon de commande',
+  'cost lines': 'lignes de frais', 'supplier payments': 'paiements fournisseurs', 'suppliers': 'fournisseurs', 'styles': 'modèles',
+  'colors and sizes': 'couleurs et pointures', 'CRM contacts': 'contacts CRM', 'CRM notes': 'notes CRM', 'stock movements': 'mouvements de stock'
 };
 Object.assign(FR, FR_SELL, FR_BUY, FR_MONEY, FR_CRM);

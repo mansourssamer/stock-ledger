@@ -19,9 +19,9 @@ version of the Flask app, rebuilt as one page that runs on the phone itself.
 | 2 | Purchasing: purchase orders, mixes and size runs, landed costs, receiving, supplier payments, documents, shipments, suppliers, locations, price list, buying plan, event calendar, missed sales | Done |
 | 3 | Money: accounts, transfers and exchanges, expenses, partners (loans, repayments, profit shares), currencies and rate corrections. Reports: overview, profit and loss, cash flow, costing, balance sheet, daily, sales and monthly reports | Done |
 | 4 | Proformas (French printout), CRM (follow-ups, contacts, customer groups, announcing new stock by WhatsApp, report, zones), backups the old app can restore too, settings | Done |
-| 5 | Final data move and switch-over | Next |
+| 5 | Switch-over: the import shows what changes, asks for a copy of this app before it removes anything entered here, and flags an older backup | Done |
 
-Until a part is rebuilt, keep using the old app for it.
+Everything the old app does is rebuilt. Until the switch-over (below), keep using the old app.
 
 ## Files
 
@@ -93,6 +93,19 @@ fetched only when shown. Photos are shrunk to phone size; documents over 700 KB 
 8. **Import**: open the app → Importer les données → choose the backup .zip from the old app's
    Backup page. The app uploads everything, reads it back and compares it with the backup.
 
+## Switching over from the old app
+
+1. In the old app, stop entering anything, then Backup → **Download a backup now**.
+2. In this app, **Import data** → choose that .zip. If this app already has data, the screen
+   shows how many records the import adds, changes and removes, and the newest entry on each side
+   (an older backup is flagged in red). Records entered in this app are listed, and the import
+   stays locked until **Download a copy of this app first** has saved them
+   (`stock-ledger-before-import-….zip`, an ordinary backup that imports back).
+3. Tick **Replace all data…** → **Import now**. The app uploads, reads everything back and compares
+   it with the backup row by row, plus stock value, what customers owe, cash and boxes in stock.
+4. Green banner → from now on enter everything here. Keep the old app untouched for a few weeks
+   as a fallback; this app's backups restore into it (Backup page → Restore) if ever needed.
+
 ## Backups
 
 Settings → Download a backup gives one .zip: `erp.db` (all the data, in the old app's own format —
@@ -123,6 +136,8 @@ opens with internet.
 - `node tests/backup_check.mjs new.db backup.db` — the backup database from a database this app made; the old app's
   figures on it (`tests/py_reference.py`) match the old app's own.
 - `node tests/offline.cjs backup.zip outdir` — opens the app with no network (and checks every file is kept on the device).
+- `node tests/e2e_switch.cjs backup.zip older.zip outdir [--phone]` — the switch-over: same backup twice changes nothing,
+  a record entered here blocks the import until the copy is downloaded, the copy brings it back, an older backup is flagged.
 
 - `node tests/e2e.cjs backup.zip outdir [--phone]` — imports a backup into a fake Firebase,
   checks the report, visits the screens and saves screenshots.

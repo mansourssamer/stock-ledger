@@ -18,17 +18,17 @@ function settings() {
   return header(t('Settings'))
     + panel(t('Backup'), `<div class="panel-b"><p>${esc(t('Download everything in one file: your data, product photos and documents. Keep it on your computer or in Google Drive. It opens in this app (Import data) and in your old app (Backup page → Restore).'))}</p>
       ${last ? `<p class="sub">${esc(t('Last backup downloaded on this device: {d}', { d: String(last).replace('T', ' ').slice(0, 16) }))}</p>` : ''}
-      ${B.busy ? `<p>${esc(t('Preparing the backup… {d} of {n} files', { d: B.progress[0], n: B.progress[1] }))}</p>` : `<div class="actions"><button class="btn primary" data-act="backupNow">${esc(t('Download a backup'))}</button>
+      ${B.busy ? `<p>${esc(t('Preparing the backup… {d} of {n} files', { d: B.progress[0], n: B.progress[1] }))}</p>` : `<div class="actions gap-t"><button class="btn primary" data-act="backupNow">${esc(t('Download a backup'))}</button>
       <a class="btn" href="#/import">${esc(t('Put a backup back'))}</a></div>`}
       ${B.err ? `<p class="errline">${esc(B.err)}</p>` : ''}
-      ${r ? `<div class="callout ${r.conflicts.length || r.missing ? 'warn' : 'good'} mtop">${esc(t('{f} saved: {r} records, {p} photos, {d} documents.', { f: r.name, r: fmtNum(r.rows), p: r.photos, d: r.documents }))}
+      ${r ? `<div class="callout ${r.conflicts.length || r.missing ? 'warn' : 'good'} gap-t">${esc(t('{f} saved: {r} records, {p} photos, {d} documents.', { f: r.name, r: fmtNum(r.rows), p: r.photos, d: r.documents }))}
         ${r.missing ? ' ' + esc(t('{n} photo(s) or document(s) couldn’t be included (not on this device yet — try again with internet).', { n: r.missing })) : ''}
         ${r.conflicts.length ? ' ' + esc(t('{n} record(s) don’t fit the old app’s format (for example two invoices with the same number); they are kept in the file, in a separate table.', { n: r.conflicts.length })) : ''}</div>` : ''}</div>`)
     + panel(t('Language'), `<div class="panel-b"><div class="chips"><button type="button" class="chip" data-act="setLang" data-v="fr" aria-pressed="${lang() === 'fr'}">Français</button>
       <button type="button" class="chip" data-act="setLang" data-v="en" aria-pressed="${lang() === 'en'}">English</button></div>
-      <p class="sub mtop">${esc(t('Documents for customers (invoices, proformas, statements, price list) are always in French.'))}</p></div>`)
+      <p class="sub gap-t">${esc(t('Documents for customers (invoices, proformas, statements, price list) are always in French.'))}</p></div>`)
     + panel(t('Account'), `<div class="panel-b"><p>${esc(t('Your data lives in your own Firebase project and is kept on this device too, so the app works without internet.'))}</p>
-      <div class="actions"><button class="btn" data-act="signOut">${esc(t('Sign out'))}</button></div></div>`)
+      <div class="actions gap-t"><button class="btn" data-act="signOut">${esc(t('Sign out'))}</button></div></div>`)
     + panel(t('About'), `<div class="panel-b"><div class="kv"><span>${esc(t('Version'))}</span><b class="mono" id="sl-version">—</b>
       <span>${esc(t('Records on this device'))}</span><b>${fmtNum(val(`SELECT (SELECT COUNT(*) FROM orders) + (SELECT COUNT(*) FROM boxes) + (SELECT COUNT(*) FROM customers)`) || 0)} ${pill(t('orders, boxes, customers'))}</b></div></div>`);
 }

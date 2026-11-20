@@ -286,7 +286,7 @@ function shipment(shRaw) {
   const acts = [`<button class="btn" data-act="editShipment" data-id="${S}">${esc(t('Edit'))}</button>`, `<button class="btn" data-act="stageShipment" data-id="${S}">${esc(t('Change stage'))}</button>`];
   if (waiting.length) acts.push(`<button class="btn primary" data-act="receiveShipment" data-id="${S}">${esc(t('Receive into stock'))}</button>`);
   return header(s.reference, { back: 'shipments', eyebrow: t('Shipment'), sub: `${stagePill(s.status)}${s.eta ? ' · ' + esc(t('ETA')) + ' ' + esc(fmtDate(s.eta)) : ''}`, actions: acts.join('') })
-    + panel('', steps + `<div class="kv mtop"><span>${esc(t('Container'))}</span><b>${esc(s.container_no || '—')}</b><span>${esc(t('Bill of lading'))}</span><b>${esc(s.bl_number || '—')}</b>
+    + panel('', steps + `<div class="kv gap-t"><span>${esc(t('Container'))}</span><b>${esc(s.container_no || '—')}</b><span>${esc(t('Bill of lading'))}</span><b>${esc(s.bl_number || '—')}</b>
       <span>${esc(t('Vessel'))}</span><b>${esc(s.vessel || '—')}</b>${s.notes ? `<span>${esc(t('Notes'))}</span><b>${esc(s.notes)}</b>` : ''}</div>`)
     + panel(t('Mixes on this shipment'), table([{ h: t('Mix') }, { h: t('Purchase order'), cls: 'hide-sm' }, { h: t('boxes'), n: true }, { h: '' }],
       mixes.map(m => ({ cells: [`<b>${esc(m.label)}</b><span class="sub">${fmtNum(m.pairs_per_box)} ${esc(t('pairs'))} / ${esc(t('box'))}${m.received_at ? ' · ' + esc(t('Received {d}', { d: fmtDate(m.received_at) })) : ''}</span>`,
