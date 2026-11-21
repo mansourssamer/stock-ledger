@@ -1,6 +1,6 @@
 // Report pages: overview, profit and loss, cash flow, costing, balance sheet, daily report,
 // sales report for any dates, monthly report. The figures come from js/reports.js.
-import { all } from './localdb.js';
+import { all, one, val } from './localdb.js';
 import * as R from './reports.js';
 import * as F from './ops/finance.js';
 import { t, lang } from './i18n.js';
@@ -128,14 +128,23 @@ function costing(...a) {
   const gnf = v => (fx && fx.usd_per_unit ? fmtMoney((Number(v) || 0) / fx.usd_per_unit, 'GNF') : '');
   const both = v => esc(usd(v)) + (fx ? `<span class="sub">${esc(gnf(v))}</span>` : '');
   const rateLine = fx ? ' · ' + t('GNF at the latest rate: 1 $ = {r} ({d})', { r: fmtMoney(1 / fx.usd_per_unit, 'GNF'), d: fmtDate(fx.effective_from) }) : '';
+  // Sealed boxes still in stock, by style and by mix (open boxes of a mix shown under the count).
+  const styleBoxes = new Map(all(`SELECT v.product_id AS pid, COUNT(DISTINCT b.id) AS n FROM boxes b JOIN box_items bi ON bi.box_id = b.id
+                                  JOIN variants v ON v.id = bi.variant_id WHERE b.status = 'in_stock' GROUP BY v.product_id`).map(x => [x.pid, x.n]));
+  const sealedAll = val(`SELECT COUNT(*) FROM boxes WHERE status = 'in_stock'`) || 0;
+  const boxesLine = n => `<span class="sub">${esc(`${fmtNum(n)} ${t('box(es)')}`)}</span>`;
+  const mixBoxes = x => {
+    const b = one(`SELECT COALESCE(SUM(status = 'in_stock'), 0) AS sealed, COALESCE(SUM(status = 'open'), 0) AS opened FROM boxes WHERE source_po_id = ? AND source_label = ?`, [x.po_id, x.label]) || { sealed: 0, opened: 0 };
+    return `<b>${fmtNum(b.sealed)}</b>${b.opened ? `<span class="sub">${esc(t('+ {n} open', { n: fmtNum(b.opened) }))}</span>` : ''}`;
+  };
   return header(t('Costing'), { sub: esc(periodText(s, e) + rateLine) }) + reportsNav('costing') + rangeBar('costing', preset, s, e)
     + tiles([tile(t('Stock value'), big(r.total_inventory_value), esc(`${fmtNum(r.total_pairs_in_stock)} ${t('pairs')}` + (fx ? ` · ${gnf(r.total_inventory_value)}` : ''))), tile(t('Cost of goods sold'), big(r.total_cogs), esc(t('in this period')))])
     + panel(t('Stock by style, at landed cost'), table([{ h: t('Style') }, { h: t('pairs'), n: true }, { h: t('Avg cost'), n: true, cls: 'hide-sm' }, { h: t('Value'), n: true }],
-      r.valuation_rows.map(x => ({ href: `product/${x.product_id}`, cells: [esc(x.product_name), fmtNum(x.qty_in_stock), both(x.avg_cost), both(x.total_value)] })),
-      { emptyText: t('No stock.'), foot: [t('Total'), fmtNum(r.total_pairs_in_stock), '', both(r.total_inventory_value)] }), { tight: true })
+      r.valuation_rows.map(x => ({ href: `product/${x.product_id}`, cells: [esc(x.product_name), fmtNum(x.qty_in_stock) + boxesLine(styleBoxes.get(x.product_id) || 0), both(x.avg_cost), both(x.total_value)] })),
+      { emptyText: t('No stock.'), foot: [t('Total'), fmtNum(r.total_pairs_in_stock) + boxesLine(sealedAll), '', both(r.total_inventory_value)] }), { tight: true })
     + `<div class="grid2">${panel(t('Cost of goods sold by style'), table([{ h: t('Style') }, { h: 'USD', n: true }], r.cogs_rows.map(x => ({ cells: [esc(x.name), esc(usd(x.cogs))] })), { emptyText: '—' }), { tight: true })}
-      ${panel(t('Landed cost per pair, by mix received'), table([{ h: t('Mix') }, { h: t('Received'), cls: 'hide-sm' }, { h: t('per pair'), n: true }],
-      r.cost_trend.map(x => ({ cells: [`${esc(x.label)}<span class="sub">${esc(poNo(x.po_id))}${x.supplier_name ? ' · ' + esc(x.supplier_name) : ''}</span>`, esc(fmtDate(x.received_at)), x.landed_cost_per_pair === null ? '—' : both(x.landed_cost_per_pair)] })), { emptyText: '—' }), { tight: true })}</div>`;
+      ${panel(t('Landed cost per pair, by mix received'), table([{ h: t('Mix') }, { h: t('Received'), cls: 'hide-sm' }, { h: t('per pair'), n: true }, { h: t('Boxes in stock'), n: true }],
+      r.cost_trend.map(x => ({ cells: [`${esc(x.label)}<span class="sub">${esc(poNo(x.po_id))}${x.supplier_name ? ' · ' + esc(x.supplier_name) : ''}</span>`, esc(fmtDate(x.received_at)), x.landed_cost_per_pair === null ? '—' : both(x.landed_cost_per_pair), mixBoxes(x)] })), { emptyText: '—' }), { tight: true })}</div>`;
 }
 
 // ---------- balance sheet ----------
