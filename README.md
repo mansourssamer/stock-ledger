@@ -153,6 +153,7 @@ opens with internet.
 - `node tests/e2e_extras.cjs backup.zip outdir [--phone]` — CSV buttons, voiding an invoice, the open boxes page.
 - `node tests/sweep.cjs backup.zip outdir [--empty | --new-records]` — every screen in French and English, computer and phone:
   page errors, "undefined"/"NaN", raw ids, sideways scrolling, hidden text, texts with no French.
+- `node tests/update.cjs outdir` — a new version reaching an open app: it reloads by itself, or offers a reload bar when a form is open.
 - `node tests/e2e_switch.cjs backup.zip older.zip outdir [--phone]` — the switch-over: same backup twice changes nothing,
   a record entered here blocks the import until the copy is downloaded, the copy brings it back, an older backup is flagged.
 
