@@ -12,6 +12,7 @@ import { go, schedule } from './app.js';
 import { poNo, csvCell, downloadText } from './buy.js';
 import { orderNo } from './sell.js';
 import { addDays } from './buying.js';
+import { latestRate } from './queries.js';
 
 const toast = m => window.dispatchEvent(new CustomEvent('sl-toast', { detail: m }));
 const usd = v => fmtUsd(v || 0);
@@ -122,14 +123,19 @@ function cashflow(...a) {
 function costing(...a) {
   const [preset, s, e] = rangeArgs(a);
   const r = R.costing(preset, s, e);
-  return header(t('Costing'), { sub: esc(periodText(s, e)) }) + reportsNav('costing') + rangeBar('costing', preset, s, e)
-    + tiles([tile(t('Stock value'), big(r.total_inventory_value), esc(`${fmtNum(r.total_pairs_in_stock)} ${t('pairs')}`)), tile(t('Cost of goods sold'), big(r.total_cogs), esc(t('in this period')))])
+  // Landed costs also in Guinean francs, at the latest GNF rate (Money → Currencies).
+  const fx = latestRate('GNF');
+  const gnf = v => (fx && fx.usd_per_unit ? fmtMoney((Number(v) || 0) / fx.usd_per_unit, 'GNF') : '');
+  const both = v => esc(usd(v)) + (fx ? `<span class="sub">${esc(gnf(v))}</span>` : '');
+  const rateLine = fx ? ' · ' + t('GNF at the latest rate: 1 $ = {r} ({d})', { r: fmtMoney(1 / fx.usd_per_unit, 'GNF'), d: fmtDate(fx.effective_from) }) : '';
+  return header(t('Costing'), { sub: esc(periodText(s, e) + rateLine) }) + reportsNav('costing') + rangeBar('costing', preset, s, e)
+    + tiles([tile(t('Stock value'), big(r.total_inventory_value), esc(`${fmtNum(r.total_pairs_in_stock)} ${t('pairs')}` + (fx ? ` · ${gnf(r.total_inventory_value)}` : ''))), tile(t('Cost of goods sold'), big(r.total_cogs), esc(t('in this period')))])
     + panel(t('Stock by style, at landed cost'), table([{ h: t('Style') }, { h: t('pairs'), n: true }, { h: t('Avg cost'), n: true, cls: 'hide-sm' }, { h: t('Value'), n: true }],
-      r.valuation_rows.map(x => ({ href: `product/${x.product_id}`, cells: [esc(x.product_name), fmtNum(x.qty_in_stock), esc(usd(x.avg_cost)), esc(usd(x.total_value))] })),
-      { emptyText: t('No stock.'), foot: [t('Total'), fmtNum(r.total_pairs_in_stock), '', esc(usd(r.total_inventory_value))] }), { tight: true })
+      r.valuation_rows.map(x => ({ href: `product/${x.product_id}`, cells: [esc(x.product_name), fmtNum(x.qty_in_stock), both(x.avg_cost), both(x.total_value)] })),
+      { emptyText: t('No stock.'), foot: [t('Total'), fmtNum(r.total_pairs_in_stock), '', both(r.total_inventory_value)] }), { tight: true })
     + `<div class="grid2">${panel(t('Cost of goods sold by style'), table([{ h: t('Style') }, { h: 'USD', n: true }], r.cogs_rows.map(x => ({ cells: [esc(x.name), esc(usd(x.cogs))] })), { emptyText: '—' }), { tight: true })}
       ${panel(t('Landed cost per pair, by mix received'), table([{ h: t('Mix') }, { h: t('Received'), cls: 'hide-sm' }, { h: t('per pair'), n: true }],
-      r.cost_trend.map(x => ({ cells: [`${esc(x.label)}<span class="sub">${esc(poNo(x.po_id))}${x.supplier_name ? ' · ' + esc(x.supplier_name) : ''}</span>`, esc(fmtDate(x.received_at)), x.landed_cost_per_pair === null ? '—' : esc(usd(x.landed_cost_per_pair))] })), { emptyText: '—' }), { tight: true })}</div>`;
+      r.cost_trend.map(x => ({ cells: [`${esc(x.label)}<span class="sub">${esc(poNo(x.po_id))}${x.supplier_name ? ' · ' + esc(x.supplier_name) : ''}</span>`, esc(fmtDate(x.received_at)), x.landed_cost_per_pair === null ? '—' : both(x.landed_cost_per_pair)] })), { emptyText: '—' }), { tight: true })}</div>`;
 }
 
 // ---------- balance sheet ----------

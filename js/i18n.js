@@ -155,6 +155,7 @@ const FR = {
   'No single pairs sold yet.': 'Aucune paire vendue au détail pour l’instant.',
   'Void invoice': 'Annuler la facture', 'Void this invoice?': 'Annuler cette facture ?', 'Yes, void it': 'Oui, l’annuler',
   'It no longer counts as owed. Payments already recorded on it stay and count towards the order. You can create a new invoice afterwards.': 'Elle ne compte plus comme due. Les paiements déjà enregistrés restent et comptent pour la commande. Vous pourrez créer une nouvelle facture ensuite.',
+  'GNF at the latest rate: 1 $ = {r} ({d})': 'GNF au dernier taux : 1 $ = {r} ({d})',
   'orders': 'commandes', 'order lines': 'lignes de commande', 'box lines': 'lignes de cartons', 'payments': 'paiements', 'customers': 'clients',
   'returns': 'retours', 'returned items': 'articles retournés', 'box contents': 'contenus de cartons', 'purchase order lines': 'lignes de bon de commande',
   'cost lines': 'lignes de frais', 'supplier payments': 'paiements fournisseurs', 'suppliers': 'fournisseurs', 'styles': 'modèles',

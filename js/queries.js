@@ -31,6 +31,14 @@ function rateOnRaw(code, onDate) {
   return row ? row.usd_per_unit : null;
 }
 
+// The rate rateOn(code) uses for today, with the day it took effect: {usd_per_unit, effective_from}.
+export function latestRate(code) {
+  return memo('latest|' + code, () =>
+    one(`SELECT usd_per_unit, effective_from FROM exchange_rates WHERE currency_code = ? AND effective_from <= date('now')
+         ORDER BY effective_from DESC, id DESC LIMIT 1`, [code])
+    || one(`SELECT usd_per_unit, effective_from FROM exchange_rates WHERE currency_code = ? ORDER BY effective_from, id LIMIT 1`, [code]) || null);
+}
+
 // app.ORDER_VALUE_SQL — an order's value net of returns, in its own currency.
 export const ORDER_VALUE_SQL = `(
     COALESCE((SELECT SUM((bl.qty_boxes - COALESCE(

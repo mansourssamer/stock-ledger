@@ -147,6 +147,7 @@ a.tile:hover{border-color:var(--line-strong)}
 .tile.hl{background:var(--accent-soft);border-color:transparent}
 .tile.hl .k{color:var(--accent)}
 @media (max-width:980px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:520px){.tile .v{font-size:1.38rem}}   /* so $20 849,01 fits on one line in a phone tile */
 @media (max-width:380px){.tile .v{font-size:1.35rem}}
 
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);min-width:0;overflow:hidden}
