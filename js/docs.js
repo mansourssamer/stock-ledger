@@ -3,12 +3,13 @@
 import { all, one } from './localdb.js';
 import * as Q from './queries.js';
 import { documentLines } from './queries.js';
-import { withLang } from './i18n.js';
+import { withLang, lang as appLang } from './i18n.js';
 import { esc, fmtMoney, fmtUsd, fmtDate, sum } from './util.js';
 import { getBlob } from './store.js';
 import { priceList } from './buy.js';
 import { proformaDoc } from './crmpages.js';
-import { stockDocHtml, stockPdf, loadPdfLib, pdfReady } from './stockdoc.js';
+import { stockDocHtml, stockPdf, stockText, loadPdfLib, pdfReady } from './stockdoc.js';
+import { schedule } from './app.js';
 import { registerActions } from './actions.js';
 
 const day = s => { const d = String(s || '').slice(0, 10).split('-'); return d.length === 3 ? `${d[2]}/${d[1]}/${d[0]}` : String(s || ''); };
@@ -92,7 +93,13 @@ export function renderDoc(kind, idRaw) {
     const pf = one(`SELECT order_id FROM proformas WHERE id = ?`, [id]);
     return `<div class="docbar"><a class="backlink" href="#/${pf && pf.order_id !== null ? 'order/' + esc(pf.order_id) : 'proformas'}">‹ Retour</a><button class="btn primary" onclick="window.print()">Imprimer / PDF</button></div><div class="doc">${proformaDoc(id)}</div>`;
   }
-  if (kind === 'stock') return `<div class="docbar"><a class="backlink" href="#/stock">‹ Retour</a><button class="btn primary" data-act="stockPdfSend">Envoyer le PDF</button><button class="btn" data-act="stockPdfSave">Télécharger le PDF</button><button class="btn" onclick="window.print()">Imprimer</button></div><div class="doc">${withLang('fr', stockDocHtml)}</div>`;
+  if (kind === 'stock') {
+    const L = stockLang(), T = stockText(L);
+    return `<div class="docbar"><a class="backlink" href="#/stock">${esc(T.back)}</a>
+      <div class="chips"><button type="button" class="chip" data-act="stockDocLang" data-v="fr" aria-pressed="${L === 'fr'}">Français</button><button type="button" class="chip" data-act="stockDocLang" data-v="en" aria-pressed="${L === 'en'}">English</button></div>
+      <button class="btn primary" data-act="stockPdfSend">${esc(T.send)}</button><button class="btn" data-act="stockPdfSave">${esc(T.save)}</button><button class="btn" onclick="window.print()">${esc(T.print)}</button></div>
+      <div class="doc">${stockDocHtml(L)}</div>`;
+  }
   if (kind === 'pricelist') return `<div class="docbar"><a class="backlink" href="#/pricelist">‹ Retour</a><button class="btn primary" onclick="window.print()">Imprimer / PDF</button></div><div class="doc">${withLang('fr', priceListDoc)}</div>`;
   const back = kind === 'invoice' ? `order/${(one(`SELECT order_id FROM invoices WHERE id = ?`, [id]) || {}).order_id}` : `customer/${id}`;
   const body = withLang('fr', () => kind === 'invoice' ? invoiceDoc(id) : statementDoc(id));
@@ -108,14 +115,23 @@ function downloadFile(file) {
   a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
+// The stock document's language: French or English, remembered on this device; at first the app's.
+let docLang = null;
+function stockLang() {
+  if (!docLang) { try { docLang = localStorage.getItem('sl-stockdoc-lang'); } catch { /* private mode */ } }
+  return docLang === 'en' || docLang === 'fr' ? docLang : (appLang() === 'en' ? 'en' : 'fr');
+}
 function sendStockPdf(share) {
   if (!pdfReady()) { toast('Préparation du PDF… réessayez dans un instant.'); loadPdfLib().catch(e => toast(e.message)); return; }
   let file;
-  try { file = stockPdf(); } catch (e) { console.error(e); toast('Le PDF n’a pas pu être créé : ' + (e.message || e)); return; }
+  try { file = stockPdf(stockLang()); } catch (e) { console.error(e); toast('Le PDF n’a pas pu être créé : ' + (e.message || e)); return; }
   if (share && navigator.canShare && navigator.canShare({ files: [file] })) {
-    navigator.share({ files: [file], title: 'État du stock' }).catch(e => { if (!e || e.name !== 'AbortError') downloadFile(file); });
+    navigator.share({ files: [file], title: stockText(stockLang()).share }).catch(e => { if (!e || e.name !== 'AbortError') downloadFile(file); });
     return;
   }
   downloadFile(file);
 }
-registerActions({ stockPdfSend: () => sendStockPdf(true), stockPdfSave: () => sendStockPdf(false) });
+registerActions({
+  stockPdfSend: () => sendStockPdf(true), stockPdfSave: () => sendStockPdf(false),
+  stockDocLang: a => { docLang = a.dataset.v; try { localStorage.setItem('sl-stockdoc-lang', docLang); } catch { /* private mode */ } schedule(); }
+});

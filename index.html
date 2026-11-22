@@ -380,10 +380,11 @@ span.chip{display:inline-flex;align-items:center;cursor:default;color:var(--ink)
 .doc td{padding:7px 5px;border-bottom:1px solid #DCD6C9;vertical-align:top}
 .doc .r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .doc tr.tot td{border-top:2px solid #1C2530;border-bottom:none;background:#F6F3EC}
+@media (max-width:520px){.doc{padding:18px 12px;overflow-x:auto}.doc table{font-size:11.5px}.doc th{font-size:8.5px;letter-spacing:.02em;padding:6px 3px}.doc td{padding:6px 3px}}   /* documents fit a phone */
 .doc .tot{max-width:320px;margin-left:auto}
 .doc .tot div{display:flex;justify-content:space-between;padding:3px 0;gap:12px}
 .doc .tot .g{font-weight:700;border-top:1px solid #1C2530;margin-top:6px;padding-top:8px;font-size:15px}
-.docbar{display:flex;gap:8px;justify-content:space-between;align-items:center;max-width:760px;margin:0 auto 12px}
+.docbar{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;max-width:760px;margin:0 auto 12px}
 @media print{body{background:#fff}#root>.app>.rail,.tabbar,.mtop,.docbar,.toast,#modals,.subnav,.rbar,.vh .actions,.noprint{display:none!important}.app{display:block}.main{padding:0}.doc{border:0;padding:0;max-width:none}.wrap{max-width:none}}
 .pimg img{max-height:260px;border-radius:var(--r);border:1px solid var(--line);background:var(--surface)}
 .mtop .dot{margin-left:auto}
