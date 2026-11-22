@@ -17,7 +17,7 @@ import { REPORT_SCREENS } from './reportpages.js';
 import { CRM_SCREENS } from './crmpages.js';
 import { SETTINGS_SCREENS } from './settings.js';
 import { followUpsToday } from './crmdata.js';
-import { openBoxesPage } from './stockdata.js';
+import { openBoxesPage, modelSales, modelSalesOf, modelMixes } from './stockdata.js';
 import * as CSV from './csvdata.js';
 import { downloadText } from './buy.js';
 import { confirmAction } from './forms.js';
@@ -86,18 +86,31 @@ function stock() {
     return { ...p, variants: vs, total: sum(vs, v => v.qty_on_hand), low: vs.length ? vs.some(v => v.qty_on_hand <= p.reorder_level) : false };
   }).filter(p => !q || [p.name, p.brand, p.category, p.sku_prefix].some(x => String(x || '').toLowerCase().includes(q)));
   const totalPairs = sum(styles, p => p.total);
+  const ms = modelSales();
+  const blank = { boxes_sold: 0, boxes_left: 0, boxes_open: 0, boxes_reserved: 0, pairs_sold: 0 };
   const rows = styles.map(p => {
     const colors = [...new Set(p.variants.map(v => v.color).filter(Boolean))];
+    const m = ms.get(p.id) || blank;
     return { href: `product/${p.id}`, cells: [
       `<b>${esc(p.name)}</b><span class="sub">${esc([p.brand, p.sku_prefix].filter(Boolean).join(' · '))}</span>`,
       esc(colors.join(', ')) || '<span class="muted">—</span>',
-      `${fmtQty(p.total)} ${p.low ? pill(t('low'), 'warn') : ''}`,
+      soldCell(m), leftCell(m, p.total, p.low),
       esc(fmtUsd(p.sale_price))] };
   });
+  const tot = { boxes_sold: sum(styles, p => (ms.get(p.id) || blank).boxes_sold), pairs_sold: sum(styles, p => (ms.get(p.id) || blank).pairs_sold),
+    boxes_left: sum(styles, p => (ms.get(p.id) || blank).boxes_left), boxes_open: sum(styles, p => (ms.get(p.id) || blank).boxes_open),
+    boxes_reserved: sum(styles, p => (ms.get(p.id) || blank).boxes_reserved) };
   return header(t('Stock'), { sub: `${styles.length} ${esc(t('Styles').toLowerCase())} · ${fmtQty(totalPairs)} ${esc(t('pairs'))}`, actions: `<button class="btn" data-act="newProduct">+ ${esc(t('New style'))}</button><button class="btn" data-act="csv" data-k="products">${esc(t('Download CSV'))}</button>` })
     + `<div class="inline">${search('q-stock', UI.stockQ, t('Search a style, brand or code'))}</div>`
-    + panel('', table([{ h: t('Styles') }, { h: t('Color'), cls: 'hide-sm' }, { h: t('On hand'), n: true }, { h: t('Price'), n: true, cls: 'hide-sm' }], rows, { emptyText: t('No products yet.') }), { tight: true });
+    + panel('', table([{ h: t('Styles') }, { h: t('Color'), cls: 'hide-sm' }, { h: t('Sold (boxes)'), n: true, cls: 'wrapsub' }, { h: t('Left (boxes)'), n: true, cls: 'wrapsub' }, { h: t('Price'), n: true, cls: 'hide-sm' }], rows,
+      { emptyText: t('No products yet.'), foot: styles.length ? [t('Total'), '', soldCell(tot), leftCell(tot, totalPairs, false), ''] : null }), { tight: true });
 }
+// Boxes as the main number (the column says so), pairs under it.
+const boxesPairs = (boxes, pairs, extra = '') => `<b>${fmtNum(boxes)}</b><span class="sub">${esc(`${fmtQty(pairs)} ${t('pairs')}`)}${extra}</span>`;
+const soldCell = m => boxesPairs(m.boxes_sold, m.pairs_sold);
+const leftCell = (m, pairs, low) => boxesPairs(m.boxes_left, pairs,
+  (m.boxes_open ? esc(' · ' + t('{n} open', { n: m.boxes_open })) : '') + (m.boxes_reserved ? esc(' · ' + t('{n} on orders', { n: m.boxes_reserved })) : ''))
+  + (low ? ' ' + pill(t('low'), 'warn') : '');
 
 function product(id) {
   const pid = /^\d+$/.test(id) ? Number(id) : id;
@@ -118,6 +131,7 @@ function product(id) {
       tile(t('Cost'), esc(fmtUsd(p.cost_price)), esc(t('per pair'))),
       tile(t('Price'), esc(fmtUsd(p.sale_price)), esc(t('per pair')))
     ])
+    + soldAndLeft(pid, total)
     + `<div id="pimg" class="pimg" data-img="${esc(p.image_filename || '')}"></div>`
     + panel(t('Sizes and stock'), table([{ h: t('Color') }, { h: t('Size') }, { h: t('Code'), cls: 'hide-sm' }, { h: t('On hand'), n: true }, { h: '' }], rows,
       { foot: ['', '', '', fmtQty(total), ''], emptyText: t('No sizes yet: add the first one.') }), { tight: true });
@@ -261,6 +275,25 @@ function orders() {
   return header(t('Sales'), { sub: `${list.length} ${esc(t('Orders').toLowerCase())}`, actions: `<button class="btn primary" data-act="newOrder">+ ${esc(t('New order'))}</button><button class="btn" data-act="csv" data-k="orders">${esc(t('Download CSV'))}</button>` })
     + `<div class="inline">${search('q-order', UI.orderQ, t('Search an order or customer'))}<div class="seg">${seg}</div></div>`
     + panel('', table([{ h: t('Order') }, { h: t('Customer') }, { h: t('Status'), cls: 'hide-sm' }, { h: t('Total'), n: true }], rows, { emptyText: t('No orders yet.') }), { tight: true });
+}
+
+// A style's sales so far and what's left, with each mix.
+function soldAndLeft(pid, pairsLeft) {
+  const m = modelSalesOf(pid);
+  const mixes = modelMixes(pid);
+  if (!mixes.length && !m.pairs_sold) return '';
+  const rows = mixes.map(x => ({ href: mixHref(x.source_po_id, x.source_label), cells: [
+    `<b>${esc(x.source_label)}</b><span class="sub">${x.source_po_id ? `PO #${esc(Q.poRef(x.source_po_id))} · ` : ''}${esc(fmtDate(x.received_at))}</span>`,
+    fmtNum(x.received), fmtNum(x.sold),
+    `<b>${fmtNum(x.in_stock)}</b>${x.opened || x.reserved ? `<span class="sub">${esc([x.opened ? t('{n} open', { n: x.opened }) : '', x.reserved ? t('{n} on orders', { n: x.reserved }) : ''].filter(Boolean).join(' · '))}</span>` : ''}`] }));
+  return panel(t('Sold so far and left'), `<div class="panel-b"><div class="kv">
+      <span>${esc(t('Sold so far'))}</span><b>${fmtNum(m.boxes_sold)} ${esc(t('box(es)'))} · ${fmtQty(m.pairs_sold)} ${esc(t('pair(s)'))}</b>
+      <span>${esc(t('Left'))}</span><b>${fmtNum(m.boxes_left)} ${esc(t('box(es)'))} · ${fmtQty(pairsLeft)} ${esc(t('pair(s)'))}</b>
+      ${m.boxes_open ? `<span>${esc(t('Open boxes'))}</span><b>${fmtNum(m.boxes_open)}</b>` : ''}
+      ${m.boxes_reserved ? `<span>${esc(t('On orders not delivered yet'))}</span><b>${fmtNum(m.boxes_reserved)} ${esc(t('box(es)'))}</b>` : ''}
+    </div></div>`
+    + (mixes.length ? table([{ h: t('Mix') }, { h: t('Received'), n: true }, { h: t('Sold'), n: true }, { h: t('In stock'), n: true, cls: 'wrapsub' }], rows,
+        { foot: [t('Total'), fmtNum(sum(mixes, x => x.received)), fmtNum(sum(mixes, x => x.sold)), fmtNum(sum(mixes, x => x.in_stock))] }) : ''), { tight: true });
 }
 
 // ---------- open boxes: single pairs ----------

@@ -43,3 +43,50 @@ export function openBoxesPage(now = new Date()) {
                      GROUP BY b.source_po_id, b.source_label ORDER BY b.source_label`);
   return { boxes, matrix, sizes: sorted, sold, mixes };
 }
+
+// For each style: boxes received, sold, still sealed in stock, open, and on orders not yet
+// delivered; pairs received, sold (net of returns; a cancelled order's sale is undone) and left.
+// A box counts under the style it holds.
+const blank = () => ({ boxes_received: 0, boxes_sold: 0, boxes_left: 0, boxes_open: 0, boxes_reserved: 0, pairs_received: 0, pairs_sold: 0, pairs_left: 0 });
+export function modelSales() {
+  const out = new Map();
+  const get = pid => { if (!out.has(pid)) out.set(pid, blank()); return out.get(pid); };
+  for (const r of all(`SELECT v.product_id AS pid, b.status, COUNT(DISTINCT b.id) AS n FROM boxes b JOIN box_items bi ON bi.box_id = b.id
+                       JOIN variants v ON v.id = bi.variant_id GROUP BY v.product_id, b.status`)) {
+    const m = get(r.pid);
+    m.boxes_received += r.n;
+    if (r.status === 'sold') m.boxes_sold += r.n;
+    else if (r.status === 'in_stock') m.boxes_left += r.n;
+    else if (r.status === 'open') m.boxes_open += r.n;
+  }
+  for (const r of all(`SELECT v.product_id AS pid,
+                         COALESCE(SUM(CASE WHEN m.reason IN ('purchase', 'initial') THEN m.change_qty END), 0) AS received,
+                         -COALESCE(SUM(CASE WHEN m.reason IN ('sale', 'return') THEN m.change_qty END), 0) AS sold,
+                         COALESCE(SUM(m.change_qty), 0) AS left_
+                       FROM stock_moves m JOIN variants v ON v.id = m.variant_id GROUP BY v.product_id`)) {
+    const m = get(r.pid);
+    m.pairs_received = r.received; m.pairs_sold = r.sold; m.pairs_left = r.left_;
+  }
+  // boxes on orders not delivered yet, by mix → the style in that mix's boxes
+  for (const r of all(`SELECT (SELECT v.product_id FROM boxes b JOIN box_items bi ON bi.box_id = b.id JOIN variants v ON v.id = bi.variant_id
+                                WHERE b.source_po_id IS obl.source_po_id AND b.source_label = obl.source_label LIMIT 1) AS pid,
+                              SUM(obl.qty_boxes) AS n
+                       FROM order_box_lines obl JOIN orders o ON o.id = obl.order_id WHERE o.status = 'open' GROUP BY obl.source_po_id, obl.source_label`)) {
+    if (r.pid !== null && r.pid !== undefined) get(r.pid).boxes_reserved += r.n || 0;
+  }
+  return out;
+}
+export const modelSalesOf = pid => modelSales().get(pid) || blank();
+
+// One style's mixes: boxes received, sold, sealed in stock, open, and on orders not delivered yet.
+export function modelMixes(pid) {
+  return all(`SELECT b.source_po_id, b.source_label, COUNT(DISTINCT b.id) AS received,
+                     COUNT(DISTINCT CASE WHEN b.status = 'sold' THEN b.id END) AS sold,
+                     COUNT(DISTINCT CASE WHEN b.status = 'in_stock' THEN b.id END) AS in_stock,
+                     COUNT(DISTINCT CASE WHEN b.status = 'open' THEN b.id END) AS opened,
+                     MIN(b.received_at) AS received_at,
+                     (SELECT COALESCE(SUM(obl.qty_boxes), 0) FROM order_box_lines obl JOIN orders o ON o.id = obl.order_id
+                      WHERE o.status = 'open' AND obl.source_po_id IS b.source_po_id AND obl.source_label = b.source_label) AS reserved
+              FROM boxes b JOIN box_items bi ON bi.box_id = b.id JOIN variants v ON v.id = bi.variant_id
+              WHERE v.product_id = ? GROUP BY b.source_po_id, b.source_label ORDER BY received_at DESC, b.source_label`, [pid]);
+}
