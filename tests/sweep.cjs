@@ -28,7 +28,7 @@ function serve() {
 }
 const LISTS = ['home', 'stock', 'boxes', 'openboxes', 'customers', 'orders', 'invoices', 'purchasing', 'suppliers', 'shipments', 'locations', 'unplaced', 'sizeruns',
   'pricelist', 'buying', 'events', 'missed', 'money', 'expenses', 'partners', 'currencies', 'reports', 'pnl', 'cashflow', 'costing', 'balance', 'daily', 'sales', 'monthly',
-  'crm', 'crmcontacts', 'crmcustomers', 'announce', 'crmreport', 'zones', 'proformas', 'settings', 'import', 'doc/pricelist'];
+  'crm', 'crmcontacts', 'crmcustomers', 'announce', 'crmreport', 'zones', 'proformas', 'settings', 'import', 'doc/pricelist', 'doc/stock/all'];
 (async () => {
   fs.mkdirSync(outDir, { recursive: true });
   const srv = await serve();

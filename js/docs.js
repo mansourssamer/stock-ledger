@@ -8,6 +8,8 @@ import { esc, fmtMoney, fmtUsd, fmtDate, sum } from './util.js';
 import { getBlob } from './store.js';
 import { priceList } from './buy.js';
 import { proformaDoc } from './crmpages.js';
+import { stockDocHtml, stockPdf, loadPdfLib, pdfReady } from './stockdoc.js';
+import { registerActions } from './actions.js';
 
 const day = s => { const d = String(s || '').slice(0, 10).split('-'); return d.length === 3 ? `${d[2]}/${d[1]}/${d[0]}` : String(s || ''); };
 const STATUS = { paid: 'Payée', partial: 'Partiellement payée', unpaid: 'Impayée', void: 'Annulée', unpriced: 'Sans prix' };
@@ -77,6 +79,7 @@ function priceListDoc() {
 }
 // Photos in a document are fetched from their own documents once it is on screen.
 export async function mountDoc() {
+  if (document.querySelector('[data-act="stockPdfSend"]')) loadPdfLib().catch(e => console.warn(e));   // ready before the tap
   for (const img of document.querySelectorAll('.doc img[data-img]')) {
     const d = await getBlob('images', img.dataset.img);
     if (d && d.data) img.src = d.data; else img.closest('figure')?.remove();
@@ -89,8 +92,30 @@ export function renderDoc(kind, idRaw) {
     const pf = one(`SELECT order_id FROM proformas WHERE id = ?`, [id]);
     return `<div class="docbar"><a class="backlink" href="#/${pf && pf.order_id !== null ? 'order/' + esc(pf.order_id) : 'proformas'}">‹ Retour</a><button class="btn primary" onclick="window.print()">Imprimer / PDF</button></div><div class="doc">${proformaDoc(id)}</div>`;
   }
+  if (kind === 'stock') return `<div class="docbar"><a class="backlink" href="#/stock">‹ Retour</a><button class="btn primary" data-act="stockPdfSend">Envoyer le PDF</button><button class="btn" data-act="stockPdfSave">Télécharger le PDF</button><button class="btn" onclick="window.print()">Imprimer</button></div><div class="doc">${withLang('fr', stockDocHtml)}</div>`;
   if (kind === 'pricelist') return `<div class="docbar"><a class="backlink" href="#/pricelist">‹ Retour</a><button class="btn primary" onclick="window.print()">Imprimer / PDF</button></div><div class="doc">${withLang('fr', priceListDoc)}</div>`;
   const back = kind === 'invoice' ? `order/${(one(`SELECT order_id FROM invoices WHERE id = ?`, [id]) || {}).order_id}` : `customer/${id}`;
   const body = withLang('fr', () => kind === 'invoice' ? invoiceDoc(id) : statementDoc(id));
   return `<div class="docbar"><a class="backlink" href="#/${esc(back)}">‹ Retour</a><button class="btn primary" onclick="window.print()">Imprimer / PDF</button></div><div class="doc">${body}</div>`;
 }
+
+// Send the stock document as a PDF: the phone's share sheet (WhatsApp, mail…) where there is one,
+// otherwise the file is downloaded.
+const toast = m => window.dispatchEvent(new CustomEvent('sl-toast', { detail: m }));
+function downloadFile(file) {
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a');
+  a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+function sendStockPdf(share) {
+  if (!pdfReady()) { toast('Préparation du PDF… réessayez dans un instant.'); loadPdfLib().catch(e => toast(e.message)); return; }
+  let file;
+  try { file = stockPdf(); } catch (e) { console.error(e); toast('Le PDF n’a pas pu être créé : ' + (e.message || e)); return; }
+  if (share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    navigator.share({ files: [file], title: 'État du stock' }).catch(e => { if (!e || e.name !== 'AbortError') downloadFile(file); });
+    return;
+  }
+  downloadFile(file);
+}
+registerActions({ stockPdfSend: () => sendStockPdf(true), stockPdfSave: () => sendStockPdf(false) });

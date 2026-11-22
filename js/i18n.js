@@ -156,7 +156,7 @@ const FR = {
   'Void invoice': 'Annuler la facture', 'Void this invoice?': 'Annuler cette facture ?', 'Yes, void it': 'Oui, l’annuler',
   'It no longer counts as owed. Payments already recorded on it stay and count towards the order. You can create a new invoice afterwards.': 'Elle ne compte plus comme due. Les paiements déjà enregistrés restent et comptent pour la commande. Vous pourrez créer une nouvelle facture ensuite.',
   'GNF at the latest rate: 1 $ = {r} ({d})': 'GNF au dernier taux : 1 $ = {r} ({d})', '+ {n} open': '+ {n} ouvert(s)',
-  '{n} open': '{n} ouvert(s)', 'Sold so far': 'Vendu à ce jour', 'Sold (boxes)': 'Vendu (cartons)', 'Left (boxes)': 'Reste (cartons)', 'Sold so far and left': 'Vendu à ce jour et reste', '{n} on orders': '{n} sur commandes', 'On orders not delivered yet': 'Sur des commandes pas encore livrées',
+  'Sold and left (PDF)': 'Vendu et reste (PDF)', '{n} open': '{n} ouvert(s)', 'Sold so far': 'Vendu à ce jour', 'Sold (boxes)': 'Vendu (cartons)', 'Left (boxes)': 'Reste (cartons)', 'Sold so far and left': 'Vendu à ce jour et reste', '{n} on orders': '{n} sur commandes', 'On orders not delivered yet': 'Sur des commandes pas encore livrées',
   'orders': 'commandes', 'order lines': 'lignes de commande', 'box lines': 'lignes de cartons', 'payments': 'paiements', 'customers': 'clients',
   'returns': 'retours', 'returned items': 'articles retournés', 'box contents': 'contenus de cartons', 'purchase order lines': 'lignes de bon de commande',
   'cost lines': 'lignes de frais', 'supplier payments': 'paiements fournisseurs', 'suppliers': 'fournisseurs', 'styles': 'modèles',

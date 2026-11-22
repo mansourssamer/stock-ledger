@@ -40,7 +40,8 @@ Everything the old app does is rebuilt. Until the switch-over (below), keep usin
 | `js/backup.js`, `js/backupdb.js`, `js/oldschema.js` | Backups: the data as an erp.db in the old app's format, with photos and documents |
 | `js/settings.js` | Settings: backup, language, account, the password for signing in on a phone |
 | `js/csvdata.js` | The CSV exports of the list pages (same columns as the old app) |
-| `js/stockdata.js` | The open boxes (single pairs) page |
+| `js/stockdata.js` | The open boxes (single pairs) page; sold so far and left, by style and by mix |
+| `js/stockdoc.js` | "État du stock — vendu et reste": the document, and the PDF sent from the phone's share sheet (jsPDF, in `vendor/`) |
 | `js/docs.js` | Customer documents in French: invoice, statement, price list |
 | `js/queries.js` | The calculations, ported from the old app with the same SQL |
 | `js/localdb.js` | The device's working copy: SQLite in memory (sql.js) |

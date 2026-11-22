@@ -7,7 +7,8 @@ import hashlib, os, re
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FILES = ['index.html', 'config.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png',
-         'vendor/firebase.js', 'vendor/sql-wasm.js', 'vendor/sql-wasm.wasm', 'vendor/jszip.min.js']
+         'vendor/firebase.js', 'vendor/sql-wasm.js', 'vendor/sql-wasm.wasm', 'vendor/jszip.min.js',
+         'vendor/jspdf.umd.min.js', 'vendor/jspdf.plugin.autotable.min.js']
 FILES += sorted(os.path.relpath(os.path.join(d, f), ROOT) for d, _, fs in os.walk(os.path.join(ROOT, 'js')) for f in fs if f.endswith('.js'))
 
 h = hashlib.sha256()

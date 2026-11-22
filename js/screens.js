@@ -100,7 +100,7 @@ function stock() {
   const tot = { boxes_sold: sum(styles, p => (ms.get(p.id) || blank).boxes_sold), pairs_sold: sum(styles, p => (ms.get(p.id) || blank).pairs_sold),
     boxes_left: sum(styles, p => (ms.get(p.id) || blank).boxes_left), boxes_open: sum(styles, p => (ms.get(p.id) || blank).boxes_open),
     boxes_reserved: sum(styles, p => (ms.get(p.id) || blank).boxes_reserved) };
-  return header(t('Stock'), { sub: `${styles.length} ${esc(t('Styles').toLowerCase())} · ${fmtQty(totalPairs)} ${esc(t('pairs'))}`, actions: `<button class="btn" data-act="newProduct">+ ${esc(t('New style'))}</button><button class="btn" data-act="csv" data-k="products">${esc(t('Download CSV'))}</button>` })
+  return header(t('Stock'), { sub: `${styles.length} ${esc(t('Styles').toLowerCase())} · ${fmtQty(totalPairs)} ${esc(t('pairs'))}`, actions: `<button class="btn" data-act="newProduct">+ ${esc(t('New style'))}</button><a class="btn" href="#/doc/stock/all">${esc(t('Sold and left (PDF)'))}</a><button class="btn" data-act="csv" data-k="products">${esc(t('Download CSV'))}</button>` })
     + `<div class="inline">${search('q-stock', UI.stockQ, t('Search a style, brand or code'))}</div>`
     + panel('', table([{ h: t('Styles') }, { h: t('Color'), cls: 'hide-sm' }, { h: t('Sold (boxes)'), n: true, cls: 'wrapsub' }, { h: t('Left (boxes)'), n: true, cls: 'wrapsub' }, { h: t('Price'), n: true, cls: 'hide-sm' }], rows,
       { emptyText: t('No products yet.'), foot: styles.length ? [t('Total'), '', soldCell(tot), leftCell(tot, totalPairs, false), ''] : null }), { tight: true });
