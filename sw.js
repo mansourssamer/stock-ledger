@@ -1,6 +1,6 @@
 // Keeps the app's own files on the device so it opens with no internet. Data never passes
 // through here: Firestore keeps its own offline copy. CACHE is set by tools/stamp_sw.py.
-const CACHE = 'stock-ledger-fcb559852e';
+const CACHE = 'stock-ledger-0e7c8e97b3';
 const SHELL = ['./', './index.html', './config.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './vendor/firebase.js', './vendor/sql-wasm.js', './vendor/sql-wasm.wasm', './vendor/jszip.min.js', './vendor/jspdf.umd.min.js', './vendor/jspdf.plugin.autotable.min.js', './js/actions.js', './js/app.js', './js/backup.js', './js/backupdb.js', './js/buy.js', './js/buying.js', './js/crmdata.js', './js/crmpages.js', './js/csvdata.js', './js/docs.js', './js/fb.js', './js/forms.js', './js/fr.js', './js/fr_buy.js', './js/fr_crm.js', './js/fr_money.js', './js/i18n.js', './js/images.js', './js/importer.js', './js/localdb.js', './js/moneydata.js', './js/moneypages.js', './js/oldschema.js', './js/ops/common.js', './js/ops/costs.js', './js/ops/crm.js', './js/ops/finance.js', './js/ops/money.js', './js/ops/purchasing.js', './js/ops/sales.js', './js/ops/stock.js', './js/plan.js', './js/queries.js', './js/reportpages.js', './js/reports.js', './js/schema.js', './js/screens.js', './js/sell.js', './js/settings.js', './js/stockdata.js', './js/stockdoc.js', './js/store.js', './js/ui.js', './js/util.js'];
 
 self.addEventListener('install', e => {

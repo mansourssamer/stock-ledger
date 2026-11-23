@@ -247,10 +247,14 @@ function customer(id) {
   const s = Q.customerSummary(cid);
   const led = Q.customerLedger(cid).slice().reverse();
   const buying = Q.customerBuying(cid);
+  // what they took on each invoice, model by model
+  const what = i => i.kind === 'box' ? `${fmtNum(i.qty)} ${plural(i.qty, 'box', 'boxes')} · ${i.name}${i.sizes ? ` (${i.sizes})` : ''}`
+    : `${fmtNum(i.qty)} ${plural(i.qty, 'pair', 'pairs')} · ${i.name}${i.color ? ` ${i.color}` : ''}, ${t('size')} ${i.size}`;
+  const back = e => { const w = Q.returnedWhat(e.box_line_id, e.variant_id); return w ? ` · ${w.name}${w.sizes ? ` (${w.sizes})` : ''}${w.size ? `, ${t('size')} ${w.size}` : ''}` : ''; };
   const ledRows = led.map(e => ({ href: `order/${e.order_id}`, cells: [esc(fmtDate(e.when)),
-    e.kind === 'invoice' ? `${esc(t('Invoice'))} <span class="mono">${esc(e.label)}</span><span class="sub">${e.boxes ? `${fmtNum(e.boxes)} ${esc(plural(e.boxes, 'box', 'boxes'))}` : esc(t('loose pairs'))}</span>`
+    e.kind === 'invoice' ? `${esc(t('Invoice'))} <span class="mono">${esc(e.label)}</span>${Q.orderContents(e.order_id).map(i => `<span class="sub">${esc(what(i))}</span>`).join('') || `<span class="sub">${e.boxes ? `${fmtNum(e.boxes)} ${esc(plural(e.boxes, 'box', 'boxes'))}` : esc(t('loose pairs'))}</span>`}`
       : e.kind === 'payment' ? `${esc(t('Payment'))}<span class="sub">${esc(t('on {inv}', { inv: e.label }))}${e.note ? ' — ' + esc(e.note) : ''}</span>`
-        : `${esc(t('Return'))}<span class="sub">${esc(t('{n} returned', { n: e.qty }))}${e.note ? ' — ' + esc(e.note) : ''}</span>`,
+        : `${esc(t('Return'))}<span class="sub">${esc(t('{n} returned', { n: e.qty }) + back(e))}${e.note ? ' — ' + esc(e.note) : ''}</span>`,
     e.charge ? esc(fmtMoney(e.charge, e.currency_code)) : '', e.payment ? esc(fmtMoney(e.payment, e.currency_code)) : '', esc(fmtMoney(e.balance, e.currency_code))] }));
   const buyRows = buying.map(b => ({ cells: [esc(b.source_label), fmtNum(b.boxes), esc(fmtMoney(b.avg_price, b.currency_code)), esc(fmtDate(b.last_bought))] }));
   return header(c.name, { back: 'customers', sub: esc([c.phone, c.address].filter(Boolean).join(' · ')),

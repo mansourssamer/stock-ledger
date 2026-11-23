@@ -221,6 +221,36 @@ export function customerSummary(customerId) {
 }
 
 // app._customer_ledger
+// The sizes of a mix, from its boxes (or its purchase-order lines before it's received): "37–41".
+export function mixSizes(poId, label) {
+  return memo('mixsz|' + poId + '|' + label, () => {
+    let r = one(`SELECT MIN(CAST(v.size AS REAL)) AS a, MAX(CAST(v.size AS REAL)) AS b FROM boxes bx JOIN box_items bi ON bi.box_id = bx.id
+                 JOIN variants v ON v.id = bi.variant_id WHERE bx.source_po_id IS ? AND bx.source_label = ? AND CAST(v.size AS REAL) > 0`, [poId, label]);
+    if (!r || !r.a) r = one(`SELECT MIN(CAST(v.size AS REAL)) AS a, MAX(CAST(v.size AS REAL)) AS b FROM po_box_groups g JOIN po_items pi ON pi.po_box_group_id = g.id
+                             JOIN variants v ON v.id = pi.variant_id WHERE g.po_id IS ? AND g.label = ? AND CAST(v.size AS REAL) > 0`, [poId, label]);
+    return r && r.a ? (r.a === r.b ? `${r.a}` : `${r.a}–${r.b}`) : '';
+  });
+}
+// What an order holds, model by model: boxes of each mix (with its sizes), then single pairs.
+export function orderContents(orderId) {
+  const out = [];
+  for (const b of all(`SELECT source_po_id, source_label, SUM(qty_boxes) AS n FROM order_box_lines WHERE order_id = ?
+                       GROUP BY source_po_id, source_label ORDER BY MIN(id)`, [orderId])) {
+    if (b.n) out.push({ kind: 'box', qty: b.n, name: String(b.source_label || '').trim(), sizes: mixSizes(b.source_po_id, b.source_label) });
+  }
+  for (const p of all(`SELECT p.name, v.color, v.size, SUM(oi.qty) AS n FROM order_items oi JOIN variants v ON v.id = oi.variant_id
+                       JOIN products p ON p.id = v.product_id WHERE oi.order_id = ? AND oi.box_id IS NULL GROUP BY v.id ORDER BY p.name, v.size`, [orderId])) {
+    if (p.n) out.push({ kind: 'pair', qty: p.n, name: String(p.name).trim(), color: p.color && !/^mix$/i.test(p.color) ? p.color : '', size: p.size });
+  }
+  return out;
+}
+// What a return line gave back: the mix of a box line, or the style and size of a pair.
+export function returnedWhat(boxLineId, variantId) {
+  if (boxLineId) { const b = one(`SELECT source_po_id, source_label FROM order_box_lines WHERE id = ?`, [boxLineId]); if (b) return { name: String(b.source_label || '').trim(), sizes: mixSizes(b.source_po_id, b.source_label) }; }
+  if (variantId) { const v = one(`SELECT p.name, v.color, v.size FROM variants v JOIN products p ON p.id = v.product_id WHERE v.id = ?`, [variantId]); if (v) return { name: String(v.name).trim(), color: v.color && !/^mix$/i.test(v.color) ? v.color : '', size: v.size }; }
+  return null;
+}
+
 export function customerLedger(customerId) {
   const events = [];
   const invoices = all(`SELECT i.id, i.invoice_number, i.issued_at, i.status, o.id as order_id, o.currency_code, COALESCE(o.fx_rate_to_usd, 1) as fx
@@ -240,11 +270,12 @@ export function customerLedger(customerId) {
                        WHERE o.customer_id = ? AND NOT EXISTS (SELECT 1 FROM invoices i3 WHERE i3.order_id = o.id AND i3.status != 'void')`, [customerId])) {
     events.push({ when: p.paid_at, kind: 'payment', label: p.invoice_number, cancelled: true, order_id: p.order_id, charge: 0, payment: p.amount, currency_code: p.currency_code, fx: p.fx });
   }
-  for (const r of all(`SELECT r.created_at, r.reason, ri.refund_amount, ri.qty, o.id as order_id, o.currency_code, COALESCE(o.fx_rate_to_usd, 1) as fx
+  for (const r of all(`SELECT r.created_at, r.reason, ri.refund_amount, ri.qty, ri.order_box_line_id, ri.variant_id, o.id as order_id, o.currency_code, COALESCE(o.fx_rate_to_usd, 1) as fx
                        FROM returns r JOIN return_items ri ON ri.return_id = r.id JOIN orders o ON o.id = r.order_id
                        WHERE o.customer_id = ? AND o.status = 'fulfilled'
                          AND EXISTS (SELECT 1 FROM invoices i4 WHERE i4.order_id = o.id AND i4.status != 'void')`, [customerId])) {
-    events.push({ when: r.created_at, kind: 'return', qty: r.qty, note: r.reason, order_id: r.order_id, charge: 0, payment: r.refund_amount, currency_code: r.currency_code, fx: r.fx });
+    events.push({ when: r.created_at, kind: 'return', qty: r.qty, note: r.reason, order_id: r.order_id, charge: 0, payment: r.refund_amount, currency_code: r.currency_code, fx: r.fx,
+      box_line_id: r.order_box_line_id, variant_id: r.variant_id });
   }
   // Same order as Python's sort: by date text, invoices before other events on the same moment.
   events.sort((a, b) => {
