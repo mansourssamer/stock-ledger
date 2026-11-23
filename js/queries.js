@@ -293,6 +293,32 @@ export function customerLedger(customerId) {
   return events;
 }
 
+// The statement's lines: the account history with the payments of one day (same currency) on one
+// line — one amount received is often spread over several invoices. The line sits where that
+// day's last payment was, and the running balance is worked out again in that order.
+export function statementLines(customerId) {
+  const led = customerLedger(customerId);
+  const key = e => `${String(e.when).slice(0, 10)}|${e.currency_code}|${e.cancelled ? 1 : 0}`;
+  const last = new Map();
+  led.forEach((e, i) => { if (e.kind === 'payment') last.set(key(e), i); });
+  const groups = new Map(), out = [];
+  led.forEach((e, i) => {
+    if (e.kind !== 'payment') { out.push({ ...e }); return; }
+    const k = key(e);
+    let g = groups.get(k);
+    if (!g) { g = { ...e, payment: 0, payment_usd: 0, labels: [], notes: [], count: 0 }; groups.set(k, g); }
+    g.payment += e.payment;
+    g.payment_usd += e.payment * e.fx;
+    g.count++;
+    if (!g.labels.includes(e.label)) g.labels.push(e.label);
+    if (e.note && !g.notes.includes(e.note)) g.notes.push(e.note);
+    if (i === last.get(k)) { g.when = e.when; out.push(g); }
+  });
+  let running = 0;
+  for (const e of out) { running += e.charge - e.payment; e.balance = running; }
+  return out;
+}
+
 // app._customer_buying
 export function customerBuying(customerId) {
   return all(`

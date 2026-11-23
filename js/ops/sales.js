@@ -465,6 +465,74 @@ export function invoicePay(invoiceId, { amount, pay_in_full, paid_on, account_id
   return msg;
 }
 
+// One amount received from a customer, not tied to one invoice: it is spread over their open
+// invoices in that currency, oldest first (each part is an ordinary invoice payment, so balances,
+// cash accounts and backups work as before). Invoices dated after the payment are left out.
+export function customerPayOnAccount(customerId, { currency_code, amount, pay_in_full, paid_on, account_id, note }) {
+  const cust = one(`SELECT id, name FROM customers WHERE id = ?`, [customerId]);
+  if (!cust) refuse('That customer no longer exists.');
+  const [paidDay, err] = formDay(paid_on);
+  if (err) refuse('Payment date: {err} Nothing was recorded.', { err });
+  const open = all(`SELECT i.id, i.invoice_number, i.issued_at, i.order_id, substr(o.created_at, 1, 10) as order_day FROM invoices i JOIN orders o ON o.id = i.order_id
+                    WHERE o.customer_id = ? AND i.status != 'void' ORDER BY i.issued_at, i.id`, [customerId])
+    .map(i => ({ ...i, ...Q.invoiceFinancials(i.id) }))
+    .filter(i => (i.status === 'unpaid' || i.status === 'partial') && i.balance > 0.004 && i.currency_code === currency_code);
+  if (!open.length) refuse('Nothing is owed on open invoices in {c}. Nothing was recorded.', { c: currency_code });
+  const due = open.filter(i => !i.order_day || i.order_day <= paidDay);
+  const later = open.length - due.length;
+  if (!due.length) refuse('Every open invoice is dated after {d}. Nothing was recorded.', { d: paidDay });
+  const cur = currency_code;
+  const owed = due.reduce((s, i) => s + i.balance, 0);
+  let amt;
+  if (amount !== undefined && amount !== null && String(amount).trim() !== '') amt = num(amount);
+  else if (pay_in_full) amt = owed;
+  else refuse('Enter the amount you received. Nothing was recorded.');
+  if (amt <= 0) refuse('Enter a payment amount greater than zero.');
+  if (amt > owed + 0.004) refuse(later ? 'That’s more than the {b} owed on invoices dated up to {d}. Nothing was recorded.' : 'That’s more than the {b} owed on all open invoices. Nothing was recorded.', { b: money(owed, cur), d: paidDay });
+  // the parts, oldest invoice first
+  const dec = (one(`SELECT decimals FROM currencies WHERE code = ?`, [cur]) || { decimals: 2 }).decimals;
+  const parts = [];
+  let left = amt;
+  for (const inv of due) {
+    if (left <= 0.004) break;
+    const part = left <= inv.balance + 0.004 ? left : inv.balance;
+    parts.push({ inv, amount: part });
+    left = pyRound(left - part, Math.max(dec, 2) + 4);
+  }
+  // into a cash account: the whole amount is converted once, the parts add up to it exactly
+  let acct = null, totalPosted = amt;
+  const acctId = asId(account_id);
+  if (acctId !== null) {
+    acct = one(`SELECT * FROM cash_accounts WHERE id = ?`, [acctId]);
+    if (acct.currency_code !== cur) {
+      const invRate = Q.rateOn(cur, paidDay), acctRate = Q.rateOn(acct.currency_code, paidDay);
+      if (!invRate || !acctRate) refuse('Set an exchange rate for {c} first. Nothing was recorded.', { c: !invRate ? cur : acct.currency_code });
+      const ac = (one(`SELECT decimals FROM currencies WHERE code = ?`, [acct.currency_code]) || { decimals: 2 }).decimals;
+      totalPosted = pyRound(amt * invRate / acctRate, ac);
+      let sum = 0;
+      parts.forEach((p, k) => {
+        p.posted = k === parts.length - 1 ? pyRound(totalPosted - sum, ac) : pyRound(p.amount * invRate / acctRate, ac);
+        sum += p.posted;
+      });
+    } else parts.forEach(p => { p.posted = p.amount; });
+  }
+  const paidAt = stamp(paidDay);
+  for (const p of parts) {
+    const paymentId = ins('invoice_payments', { invoice_id: p.inv.id, amount: p.amount, note: note || null, paid_at: paidAt });
+    if (acct) postCashTransaction(acct.id, p.posted, 'customer_payment', { occurredOn: paidDay, description: `Payment on ${p.inv.invoice_number} — ${cust.name}`, refType: 'invoice_payment', refId: paymentId });
+  }
+  const list = parts.map(p => {
+    const rest = p.inv.balance - p.amount;
+    return `${p.inv.invoice_number} ${money(p.amount, cur)}${rest > 0.004 ? ' (' + t('still owes {l}', { l: money(rest, cur) }) + ')' : ' (' + t('paid in full') + ')'}`;
+  }).join(' · ');
+  let msg = t('Recorded {a} from {c}, spread over {n} invoice(s): {list}.', { a: money(amt, cur), c: String(cust.name).trim(), n: parts.length, list });
+  if (acct && acct.currency_code !== cur) msg += ' ' + t('{p} into {acc}.', { p: money(totalPosted, acct.currency_code), acc: acct.name });
+  const stillOwed = open.reduce((s, i) => s + i.balance, 0) - amt;
+  msg += ' ' + (stillOwed > 0.004 ? t('Still owed in total: {l}.', { l: money(stillOwed, cur) }) : t('Every invoice is now paid.'));
+  if (!acct) msg += ' ' + t('(No account selected — not posted to a cash account.)');
+  return msg;
+}
+
 export function invoicePaymentDelete(paymentId) {
   const p = one(`SELECT ip.*, i.order_id, i.invoice_number FROM invoice_payments ip JOIN invoices i ON i.id = ip.invoice_id WHERE ip.id = ?`, [paymentId]);
   if (!p) refuse('That payment no longer exists.');

@@ -48,7 +48,7 @@ function statementDoc(customerId) {
   const c = one(`SELECT * FROM customers WHERE id = ?`, [customerId]);
   if (!c) return '<p>—</p>';
   const s = Q.customerSummary(customerId);
-  const led = Q.customerLedger(customerId);
+  const led = Q.statementLines(customerId);
   // what the customer took on each invoice (and gave back on a return), model by model
   const fr = (n, one, many) => `${n} ${n > 1 ? many : one}`;
   const what = i => i.kind === 'box' ? `${fr(i.qty, 'carton', 'cartons')} · ${esc(i.name)}${i.sizes ? ` (${esc(i.sizes)})` : ''}`
@@ -56,7 +56,9 @@ function statementDoc(customerId) {
   const lines = items => items.length ? `<div class="items">${items.map(i => `<div>${what(i)}</div>`).join('')}</div>` : '';
   const back = e => { const w = Q.returnedWhat(e.box_line_id, e.variant_id); return w ? ` · ${esc(w.name)}${w.sizes ? ` (${esc(w.sizes)})` : ''}${w.size ? `, pointure ${esc(w.size)}` : ''}` : ''; };
   const ref = e => e.kind === 'invoice' ? `Facture ${esc(e.label)} <span style="color:#666">— ${e.boxes ? `${e.boxes} carton(s)` : 'paires au détail'}</span>${lines(Q.orderContents(e.order_id))}`
-    : e.kind === 'payment' ? `Paiement <span style="color:#666">— ${esc(e.label)}${e.cancelled ? ' (annulée)' : ''}${e.note ? ' — ' + esc(e.note) : ''}</span>`
+    : e.kind === 'payment' ? (e.labels.length > 1
+      ? `Paiement${e.cancelled ? ' <span style="color:#666">(annulée)</span>' : ''}${e.notes.length ? ` <span style="color:#666">— ${esc(e.notes.join(' · '))}</span>` : ''}<div class="items">Réparti sur ${e.labels.length} factures : ${e.labels.slice().sort((a, b) => String(a).localeCompare(String(b), 'fr', { numeric: true })).map(l => `<span style="white-space:nowrap">${esc(l)}</span>`).join(', ')}</div>`
+      : `Paiement <span style="color:#666">— ${esc(e.labels[0])}${e.cancelled ? ' (annulée)' : ''}${e.notes.length ? ' — ' + esc(e.notes.join(' · ')) : ''}</span>`)
       : `Retour <span style="color:#666">— ${e.qty} retourné(s)${back(e)}${e.note ? ' — ' + esc(e.note) : ''}</span>`;
   return `<div class="dh"><div><h1>Relevé de compte</h1><div class="mono">Au ${esc(day(new Date().toISOString()))}</div></div></div>
     <div class="parties"><div><div class="lbl">Pour</div><b>${esc(c.name)}</b>${[c.email, c.phone, c.address].filter(Boolean).map(x => `<div>${esc(x)}</div>`).join('')}</div></div>

@@ -293,9 +293,16 @@ registerActions({
     const cid = id(a.dataset.id);
     const open = KO.openInvoices(cid);
     if (!open.length) { toast(t('Nothing is owed.')); return; }
+    // one amount spread over every open invoice (oldest first), or one invoice only
+    const curs = [...new Set(open.map(i => i.currency_code))];
+    const owed = c => open.filter(i => i.currency_code === c).reduce((s, i) => s + i.balance, 0);
+    const spread = open.length > 1 ? curs.filter(c => open.filter(i => i.currency_code === c).length > 1)
+      .map(c => ['all:' + c, t('All open invoices, oldest first — owes {b}', { b: fmtMoney(owed(c), c) })]) : [];
     openForm({ title: t('Record a payment'),
       fields: [
-        { name: 'invoice_id', label: t('Invoice'), type: 'select', options: open.map(i => [i.id, `${i.invoice_number} · ${fmtDate(i.issued_at)} — ${t('owes')} ${fmtMoney(i.balance, i.currency_code)}`]) },
+        { name: 'invoice_id', label: t('Pay'), type: 'select', full: true, value: spread.length ? spread[0][0] : open[0].id,
+          options: [...spread, ...open.map(i => [i.id, `${i.invoice_number} · ${fmtDate(i.issued_at)} — ${t('owes')} ${fmtMoney(i.balance, i.currency_code)}`])],
+          hint: spread.length ? t('The amount goes to the oldest invoices first. Or pick one invoice.') : '' },
         { name: 'amount', label: t('Amount received (in the invoice currency)'), type: 'money' },
         { name: 'pay_in_full', label: t('Paid in full'), type: 'checkbox' },
         { name: 'paid_on', label: t('Date'), type: 'date', value: today() },
@@ -303,7 +310,9 @@ registerActions({
         { name: 'note', label: t('Notes'), type: 'text' }
       ],
       submit: t('Record the payment'),
-      run: v => SO.invoicePay(id(v.invoice_id), { ...v, amount: v.pay_in_full ? '' : v.amount, account_id: id(v.account_id) }), done: after() });
+      run: v => String(v.invoice_id).startsWith('all:')
+        ? SO.customerPayOnAccount(cid, { ...v, currency_code: String(v.invoice_id).slice(4), amount: v.pay_in_full ? '' : v.amount, account_id: id(v.account_id) })
+        : SO.invoicePay(id(v.invoice_id), { ...v, amount: v.pay_in_full ? '' : v.amount, account_id: id(v.account_id) }), done: after() });
   },
 
   // ---------- products and sizes ----------

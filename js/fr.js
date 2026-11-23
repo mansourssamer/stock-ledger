@@ -138,5 +138,17 @@ export const FR_SELL = {
   '{v}: {q} needed, {h} available': '{v} : {q} nécessaires, {h} disponibles',
   'free to sell': 'disponibles à la vente', 'Price list': 'Liste de prix',
   // labels that were missing on earlier screens
-  'quantity': 'la quantité', 'reorder level': 'le seuil', 'Order total': 'Total de la commande', 'Credit limit': 'Plafond de crédit'
+  'quantity': 'la quantité', 'reorder level': 'le seuil', 'Order total': 'Total de la commande', 'Credit limit': 'Plafond de crédit',
+  // one payment spread over several invoices
+  'Pay': 'Payer', 'All open invoices, oldest first — owes {b}': 'Toutes les factures ouvertes, les plus anciennes d’abord — doit {b}',
+  'The amount goes to the oldest invoices first. Or pick one invoice.': 'Le montant va d’abord aux factures les plus anciennes. Ou choisissez une seule facture.',
+  'That customer no longer exists.': 'Ce client n’existe plus.', 'Enter a payment amount greater than zero.': 'Saisissez un montant supérieur à zéro.',
+  'Nothing is owed on this invoice.': 'Rien n’est dû sur cette facture.',
+  'Nothing is owed on open invoices in {c}. Nothing was recorded.': 'Rien n’est dû sur des factures ouvertes en {c}. Rien n’a été enregistré.',
+  'Every open invoice is dated after {d}. Nothing was recorded.': 'Toutes les factures ouvertes sont datées après le {d}. Rien n’a été enregistré.',
+  'That’s more than the {b} owed on invoices dated up to {d}. Nothing was recorded.': 'C’est plus que les {b} dus sur les factures datées jusqu’au {d}. Rien n’a été enregistré.',
+  'That’s more than the {b} owed on all open invoices. Nothing was recorded.': 'C’est plus que les {b} dus sur toutes les factures ouvertes. Rien n’a été enregistré.',
+  'still owes {l}': 'reste {l}', 'paid in full': 'payée en totalité',
+  'Recorded {a} from {c}, spread over {n} invoice(s): {list}.': 'Paiement de {a} de {c} enregistré, réparti sur {n} facture(s) : {list}.',
+  'Still owed in total: {l}.': 'Reste dû au total : {l}.', 'Every invoice is now paid.': 'Toutes les factures sont maintenant payées.'
 };

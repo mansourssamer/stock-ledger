@@ -180,7 +180,7 @@ export function toast(msg) {
   el.textContent = msg;
   el.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.hidden = true; }, 4200);
+  toastTimer = setTimeout(() => { el.hidden = true; }, Math.min(15000, Math.max(4200, String(msg).length * 55)));   // long messages stay longer
 }
 
 // ---------- events ----------
