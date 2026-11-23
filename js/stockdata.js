@@ -90,3 +90,38 @@ export function modelMixes(pid) {
               FROM boxes b JOIN box_items bi ON bi.box_id = b.id JOIN variants v ON v.id = bi.variant_id
               WHERE v.product_id = ? GROUP BY b.source_po_id, b.source_label ORDER BY received_at DESC, b.source_label`, [pid]);
 }
+
+// Each style's mixes (for example the M in 37–41 and the L in 41–45 of the same model), with
+// boxes and pairs sold and left: pairs sold = the pairs of boxes sold + pairs taken out of open
+// boxes; pairs left = sealed boxes + what's left in open boxes. Map: style id → mixes, small sizes first.
+const LETTER = /\s(XXS|XS|S|M|L|XL|XXL)$/i;
+export function mixBreakdown() {
+  const reserved = new Map(all(`SELECT obl.source_po_id AS po, obl.source_label AS label, SUM(obl.qty_boxes) AS n FROM order_box_lines obl
+                                JOIN orders o ON o.id = obl.order_id WHERE o.status = 'open' GROUP BY obl.source_po_id, obl.source_label`).map(r => [`${r.po}|${r.label}`, r.n || 0]));
+  const out = new Map();
+  for (const r of all(`SELECT v.product_id AS pid, b.source_po_id AS po, b.source_label AS label,
+                         COUNT(DISTINCT b.id) AS received,
+                         COUNT(DISTINCT CASE WHEN b.status = 'sold' THEN b.id END) AS sold,
+                         COUNT(DISTINCT CASE WHEN b.status = 'in_stock' THEN b.id END) AS sealed,
+                         COUNT(DISTINCT CASE WHEN b.status = 'open' THEN b.id END) AS opened,
+                         COALESCE(SUM(CASE WHEN b.status = 'sold' THEN bi.qty END), 0) AS pairs_in_sold,
+                         COALESCE(SUM(CASE WHEN b.status = 'in_stock' THEN bi.qty END), 0) AS pairs_sealed,
+                         COALESCE(SUM(CASE WHEN b.status = 'open' THEN COALESCE(bi.qty_left, 0) END), 0) AS pairs_open_left,
+                         COALESCE(SUM(CASE WHEN b.status = 'open' THEN bi.qty - COALESCE(bi.qty_left, 0) END), 0) AS pairs_taken,
+                         MIN(CASE WHEN CAST(v.size AS REAL) > 0 THEN CAST(v.size AS REAL) END) AS smin,
+                         MAX(CASE WHEN CAST(v.size AS REAL) > 0 THEN CAST(v.size AS REAL) END) AS smax,
+                         MIN(b.received_at) AS received_at
+                       FROM boxes b JOIN box_items bi ON bi.box_id = b.id JOIN variants v ON v.id = bi.variant_id
+                       GROUP BY v.product_id, b.source_po_id, b.source_label`)) {
+    const m = (String(r.label || '').trim().match(LETTER) || [])[1];
+    const range = r.smin ? (r.smin === r.smax ? `${r.smin}` : `${r.smin}–${r.smax}`) : '';
+    const mix = { po: r.po, label: r.label, letter: m ? m.toUpperCase() : '', range, smin: r.smin || 0, received: r.received,
+      boxes_sold: r.sold, pairs_sold: r.pairs_in_sold + r.pairs_taken, boxes_left: r.sealed, boxes_open: r.opened,
+      pairs_left: r.pairs_sealed + r.pairs_open_left, boxes_reserved: reserved.get(`${r.po}|${r.label}`) || 0, received_at: r.received_at };
+    mix.name = [mix.letter, mix.range].filter(Boolean).join(' · ') || String(r.label || '');
+    if (!out.has(r.pid)) out.set(r.pid, []);
+    out.get(r.pid).push(mix);
+  }
+  for (const list of out.values()) list.sort((a, b) => a.smin - b.smin || String(a.label).localeCompare(String(b.label)));
+  return out;
+}

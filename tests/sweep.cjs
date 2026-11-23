@@ -121,7 +121,7 @@ const LISTS = ['home', 'stock', 'boxes', 'openboxes', 'customers', 'orders', 'in
           const overflow = document.documentElement.scrollWidth > window.innerWidth + 1;
           const hidden = [];
           for (const el of main.querySelectorAll('*')) {
-            if (!el.textContent.trim() || el.closest('[hidden],.hide-sm,.noprint,.modal,.print-only,.mtop,option,select,template,script,style')) continue;
+            if (!el.textContent.trim() || el.closest('[hidden],.hide-sm,.dot-sep,.noprint,.modal,.print-only,.mtop,option,select,template,script,style')) continue;
             if (getComputedStyle(el).display === 'none') hidden.push((el.className || el.tagName) + ': ' + el.textContent.trim().slice(0, 50));
           }
           const wide = [];

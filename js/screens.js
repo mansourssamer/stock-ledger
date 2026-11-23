@@ -17,7 +17,7 @@ import { REPORT_SCREENS } from './reportpages.js';
 import { CRM_SCREENS } from './crmpages.js';
 import { SETTINGS_SCREENS } from './settings.js';
 import { followUpsToday } from './crmdata.js';
-import { openBoxesPage, modelSales, modelSalesOf, modelMixes } from './stockdata.js';
+import { openBoxesPage, modelSales, modelSalesOf, modelMixes, mixBreakdown } from './stockdata.js';
 import * as CSV from './csvdata.js';
 import { downloadText } from './buy.js';
 import { confirmAction } from './forms.js';
@@ -87,16 +87,23 @@ function stock() {
   }).filter(p => !q || [p.name, p.brand, p.category, p.sku_prefix].some(x => String(x || '').toLowerCase().includes(q)));
   const totalPairs = sum(styles, p => p.total);
   const ms = modelSales();
+  const mixes = mixBreakdown();
   const blank = { boxes_sold: 0, boxes_left: 0, boxes_open: 0, boxes_reserved: 0, pairs_sold: 0 };
-  const rows = styles.map(p => {
+  const rows = [];
+  for (const p of styles) {
     const colors = [...new Set(p.variants.map(v => v.color).filter(Boolean))];
     const m = ms.get(p.id) || blank;
-    return { href: `product/${p.id}`, cells: [
-      `<b>${esc(p.name)}</b><span class="sub">${esc([p.brand, p.sku_prefix].filter(Boolean).join(' · '))}</span>`,
+    const mx = mixes.get(p.id) || [];
+    // one mix: its sizes go under the name; two or more (an M and an L…): a line for each under the style
+    const sizes = mx.length === 1 ? mx[0].name : '';
+    rows.push({ href: `product/${p.id}`, cells: [
+      `<b>${esc(p.name)}</b><span class="sub">${[p.brand ? esc(p.brand) : '', p.sku_prefix ? `<span class="hide-sm">${esc(p.sku_prefix)}</span>` : '', sizes ? `<b class="sz">${esc(sizes)}</b>` : ''].filter(Boolean).join('<span class="dot-sep"> · </span>')}</span>`,
       esc(colors.join(', ')) || '<span class="muted">—</span>',
       soldCell(m), leftCell(m, p.total, p.low),
-      esc(fmtUsd(p.sale_price))] };
-  });
+      esc(fmtUsd(p.sale_price))] });
+    if (mx.length > 1) for (const x of mx) rows.push({ cls: 'subrow', href: mixHref(x.po, x.label), cells: [
+      `<span class="mixname">${esc(x.name)}</span>`, '', soldCell(x), leftCell(x, x.pairs_left, false), ''] });
+  }
   const tot = { boxes_sold: sum(styles, p => (ms.get(p.id) || blank).boxes_sold), pairs_sold: sum(styles, p => (ms.get(p.id) || blank).pairs_sold),
     boxes_left: sum(styles, p => (ms.get(p.id) || blank).boxes_left), boxes_open: sum(styles, p => (ms.get(p.id) || blank).boxes_open),
     boxes_reserved: sum(styles, p => (ms.get(p.id) || blank).boxes_reserved) };

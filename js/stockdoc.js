@@ -3,7 +3,7 @@
 // for customers). The PDF is drawn with jsPDF, loaded only when the document is opened, so the
 // share sheet can open straight from the tap.
 import { all } from './localdb.js';
-import { modelSales } from './stockdata.js';
+import { modelSales, mixBreakdown } from './stockdata.js';
 import { esc, fmtNum } from './util.js';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -36,12 +36,22 @@ export const stockText = lang => TX[lang] || TX.fr;
 export function stockReport(lang = 'fr') {
   const T = stockText(lang);
   const ms = modelSales();
+  const mixes = mixBreakdown();
+  const noteOf = r => [r.open ? T.open(r.open) : '', r.reserved ? T.onOrders(r.reserved) : ''].filter(Boolean).join(' · ');
   const rows = all(`SELECT id, name, brand FROM products ORDER BY name`).map(p => {
     const m = ms.get(p.id) || {};
+    const mx = mixes.get(p.id) || [];
     const r = { name: String(p.name).trim(), brand: p.brand || '', received: m.boxes_received || 0, sold: m.boxes_sold || 0, sold_pairs: m.pairs_sold || 0,
-      left: m.boxes_left || 0, left_pairs: m.pairs_left || 0, open: m.boxes_open || 0, reserved: m.boxes_reserved || 0 };
+      left: m.boxes_left || 0, left_pairs: m.pairs_left || 0, open: m.boxes_open || 0, reserved: m.boxes_reserved || 0,
+      sizes: mx.length === 1 ? mx[0].name : '',
+      // two or more mixes of the model (an M and an L…): a line for each
+      mixes: mx.length > 1 ? mx.map(x => {
+        const y = { name: x.name, received: x.received, sold: x.boxes_sold, sold_pairs: x.pairs_sold, left: x.boxes_left, left_pairs: x.pairs_left, open: x.boxes_open, reserved: x.boxes_reserved };
+        y.pct = y.received ? Math.round(y.sold / y.received * 100) : null; y.note = noteOf(y);
+        return y;
+      }) : [] };
     r.pct = r.received ? Math.round(r.sold / r.received * 100) : null;
-    r.note = [r.open ? T.open(r.open) : '', r.reserved ? T.onOrders(r.reserved) : ''].filter(Boolean).join(' · ');
+    r.note = noteOf(r);
     return r;
   }).filter(r => r.received || r.sold_pairs || r.left_pairs);
   const tot = { received: 0, sold: 0, sold_pairs: 0, left: 0, left_pairs: 0, open: 0, reserved: 0 };
@@ -55,9 +65,10 @@ export function stockDocHtml(lang = 'fr') {
   const T = stockText(lang), n = T.num;
   const { date, rows, tot } = stockReport(lang);
   if (!rows.length) return `<p>${esc(T.empty)}</p>`;
-  const tr = (r, b) => `<tr${b ? ' class="tot"' : ''}><td>${b ? `<b>${esc(T.total)}</b>` : `<b>${esc(r.name)}</b>${r.brand ? `<div class="meta">${esc(r.brand)}</div>` : ''}`}</td>
-    <td class="r mono">${n(r.received)}</td><td class="r mono">${n(r.sold)}</td><td class="r mono">${n(r.sold_pairs)}</td>
-    <td class="r mono">${n(r.left)}</td><td class="r mono">${n(r.left_pairs)}</td><td class="r mono">${T.pct(r.pct)}</td><td class="meta">${esc(r.note)}</td></tr>`;
+  const nums = r => `<td class="r mono">${n(r.received)}</td><td class="r mono">${n(r.sold)}</td><td class="r mono">${n(r.sold_pairs)}</td>
+    <td class="r mono">${n(r.left)}</td><td class="r mono">${n(r.left_pairs)}</td><td class="r mono">${T.pct(r.pct)}</td><td class="meta">${esc(r.note)}</td>`;
+  const tr = (r, b) => `<tr${b ? ' class="tot"' : ''}><td>${b ? `<b>${esc(T.total)}</b>` : `<b>${esc(r.name)}</b>${r.brand || r.sizes ? `<div class="meta">${esc([r.brand, r.sizes].filter(Boolean).join(' · '))}</div>` : ''}`}</td>${nums(r)}</tr>`
+    + (b ? '' : r.mixes.map(x => `<tr class="mix"><td>↳ ${esc(x.name)}</td>${nums(x)}</tr>`).join(''));
   return `<div class="dh"><div><h1>${esc(T.title)}</h1><div class="mono">${esc(T.sub(T.date(date)))}</div></div></div>
     <table><thead><tr>${T.cols.map((c, i) => `<th${i && i < 7 ? ' class="r"' : ''}>${c.split('\n').map(esc).join('<br>')}</th>`).join('')}</tr></thead>
       <tbody>${rows.map(r => tr(r)).join('')}${tr(tot, true)}</tbody></table>
@@ -95,11 +106,16 @@ export function stockPdf(lang = 'fr') {
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(100);
   doc.text(T.sub(T.date(date)), 40, 66);
   doc.setDrawColor(28, 37, 48); doc.setLineWidth(1.2); doc.line(40, 76, W - 40, 76);
-  const line = r => [r.name, n(r.received), n(r.sold), n(r.sold_pairs), n(r.left), n(r.left_pairs), T.pct(r.pct), r.note];
+  const line = (r, name = r.name) => [name, n(r.received), n(r.sold), n(r.sold_pairs), n(r.left), n(r.left_pairs), T.pct(r.pct), r.note];
+  const body = [], mixRows = new Set();
+  for (const r of rows) {
+    body.push(line(r, r.sizes ? `${r.name} (${r.sizes})` : r.name));
+    for (const x of r.mixes) { mixRows.add(body.length); body.push(line(x, `     ${x.name}`)); }
+  }
   doc.autoTable({
     startY: 88, margin: { left: 40, right: 40, bottom: 46 },
     head: [T.cols],
-    body: rows.map(line),
+    body,
     foot: [[T.total, ...line(tot).slice(1)]],
     showFoot: 'lastPage',
     styles: { font: 'helvetica', fontSize: 8.5, cellPadding: 4, textColor: [28, 37, 48], lineColor: [220, 214, 201], lineWidth: 0.4 },
@@ -111,6 +127,7 @@ export function stockPdf(lang = 'fr') {
     didParseCell: d => {
       if ((d.section === 'head' || d.section === 'foot') && (d.column.index === 0 || d.column.index === 7)) d.cell.styles.halign = 'left';
       if (d.section === 'foot' && d.column.index === 7) d.cell.styles.fontSize = 7.5;
+      if (d.section === 'body' && mixRows.has(d.row.index)) { d.cell.styles.fontSize = 7.8; d.cell.styles.textColor = [80, 90, 100]; if (d.column.index === 0) d.cell.styles.fontStyle = 'normal'; }
     },
     didDrawPage: () => {
       const H = doc.internal.pageSize.getHeight();
