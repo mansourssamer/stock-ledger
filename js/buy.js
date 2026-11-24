@@ -387,11 +387,74 @@ export function priceList() {
       price: tiers.length && tiers[0].min_boxes === 1 ? tiers[0] : null, tiers, styles };
   });
 }
+// If all the stock sold at the price list: every sealed box at its mix's 1-box price, the loose
+// pairs of open boxes at the price per pair, against their landed cost (all in USD, shown in GNF
+// at the latest rate). Mixes without a price are listed apart.
+export function stockAtPrices(mixes = priceList()) {
+  const byMix = new Map(mixes.map(m => [`${m.source_po_id}|${m.source_label}`, m]));
+  const loose = new Map();
+  for (const r of all(`SELECT b.source_po_id, b.source_label, SUM(bi.qty_left) as pairs, SUM(bi.qty_left * bi.unit_cost) as cost FROM boxes b JOIN box_items bi ON bi.box_id = b.id
+                       WHERE b.status = 'open' AND bi.qty_left > 0 GROUP BY b.source_po_id, b.source_label`)) loose.set(`${r.source_po_id}|${r.source_label}`, r);
+  const rows = [], unpriced = [];
+  const keys = new Set([...byMix.keys(), ...loose.keys()]);
+  for (const k of keys) {
+    const m = byMix.get(k), l = loose.get(k);
+    const label = m ? m.source_label : l.source_label;
+    let price = m && m.price;
+    if (!m && l) {   // only loose pairs left of this mix: its 1-box price, if it has one
+      const tr = one(`SELECT * FROM price_tiers WHERE source_po_id IS ? AND source_label = ? ORDER BY min_boxes LIMIT 1`, [l.source_po_id, l.source_label]);
+      if (tr && tr.min_boxes === 1) price = tr;
+    }
+    const rate = price ? Q.rateOn(price.currency_code) : null;
+    const boxes = m ? m.available : 0, ppb = m ? m.pairs_per_box : 0, pairs = boxes * ppb + (l ? l.pairs : 0);
+    const cost = (m ? boxes * m.cost_box_usd : 0) + (l ? l.cost : 0);
+    if (!price || rate === null) { unpriced.push({ label, boxes, loose: l ? l.pairs : 0, cost_usd: cost }); continue; }
+    const sales = pairs * price.price_per_pair, salesUsd = sales * rate;
+    rows.push({ label, po: m ? m.source_po_id : l.source_po_id, boxes, loose: l ? l.pairs : 0, pairs, cur: price.currency_code, price_pair: price.price_per_pair,
+      sales, sales_usd: salesUsd, cost_usd: cost, profit_usd: salesUsd - cost, profit_pair_usd: pairs ? (salesUsd - cost) / pairs : 0, margin: salesUsd ? (salesUsd - cost) / salesUsd * 100 : null });
+  }
+  rows.sort((a, b) => b.profit_usd - a.profit_usd || (a.label < b.label ? -1 : 1));
+  unpriced.sort((a, b) => (a.label < b.label ? -1 : 1));
+  const tot = f => rows.reduce((s, r) => s + r[f], 0);
+  const sales = tot('sales_usd'), cost = tot('cost_usd');
+  const fx = Q.latestRate('GNF');
+  return { rows, unpriced, boxes: tot('boxes'), loose: tot('loose'), pairs: tot('pairs'), sales_usd: sales, cost_usd: cost, profit_usd: sales - cost, margin: sales ? (sales - cost) / sales * 100 : null,
+    unpriced_cost_usd: unpriced.reduce((s, u) => s + u.cost_usd, 0), gnf_per_usd: fx && fx.usd_per_unit ? 1 / fx.usd_per_unit : null, rate_from: fx ? fx.effective_from : null };
+}
+// big GNF amounts on a tile: 139,7 M FG · 1,23 Md FG
+const gnfShort = v => {
+  const a = Math.abs(v);
+  return (v < 0 ? '−' : '') + (a >= 1e9 ? `${fmtNum(a / 1e9, 2)} ${t('bn')} FG` : a >= 1e6 ? `${fmtNum(a / 1e6, 1)} M FG` : fmtMoney(a, 'GNF'));
+};
+function stockAtPricesPanel(mixes) {
+  const r = stockAtPrices(mixes);
+  if (!r.rows.length) return '';
+  const g = r.gnf_per_usd, gnf = v => (g ? fmtMoney(v * g, 'GNF') : '');
+  const head = g ? [tile(t('Sales'), esc(gnfShort(r.sales_usd * g)), esc(`${gnf(r.sales_usd)} · ${fmtUsd(r.sales_usd)}`)),
+    tile(t('Landed cost'), esc(gnfShort(r.cost_usd * g)), esc(`${gnf(r.cost_usd)} · ${fmtUsd(r.cost_usd)}`)),
+    tile(t('Gross profit'), `<span class="${r.profit_usd < 0 ? 'neg' : ''}">${esc(gnfShort(r.profit_usd * g))}</span>`, esc(`${gnf(r.profit_usd)} · ${fmtUsd(r.profit_usd)} · ${t('margin')} ${fmtNum(r.margin, 1)} %`))]
+    : [tile(t('Sales'), esc(fmtUsd(r.sales_usd))), tile(t('Landed cost'), esc(fmtUsd(r.cost_usd))), tile(t('Gross profit'), esc(fmtUsd(r.profit_usd)), esc(`${t('margin')} ${fmtNum(r.margin, 1)} %`))];
+  const what = t('{p} pairs in {n} priced mixes: {b} sealed boxes', { b: fmtNum(r.boxes), p: fmtNum(r.pairs), n: r.rows.length })
+    + (r.loose ? ' + ' + t('{l} loose pairs in open boxes', { l: fmtNum(r.loose) }) : '') + '. '
+    + t('Each mix at its 1-box price, against its landed cost.') + (g ? ' ' + t('1 USD = {r} GNF (rate of {d}).', { r: fmtNum(g, 0), d: fmtDate(r.rate_from) }) : '');
+  const left = r.unpriced.length ? `<p class="sub">${esc(t('Not counted, no price yet: {list} — landed cost {c}.', {
+    list: r.unpriced.map(u => `${u.label.trim()} (${u.boxes ? `${fmtNum(u.boxes)} ${plural(u.boxes, 'box', 'boxes')}` : ''}${u.boxes && u.loose ? ' + ' : ''}${u.loose ? `${fmtNum(u.loose)} ${t('pairs')}` : ''})`).join(', '),
+    c: (g ? gnf(r.unpriced_cost_usd) + ' · ' : '') + fmtUsd(r.unpriced_cost_usd) }))}</p>` : '';
+  const rows = r.rows.map(x => ({ cells: [`${esc(x.label.trim())}<span class="sub">${esc(t('{p} per pair', { p: g ? fmtMoney(x.profit_pair_usd * g, 'GNF') : fmtUsd(x.profit_pair_usd) }))}</span>`,
+    `${fmtNum(x.boxes)}${x.loose ? `<span class="sub">+ ${fmtNum(x.loose)} ${esc(t('pairs'))}</span>` : ''}`,
+    `<span class="${x.profit_usd < 0 ? 'neg' : ''}">${esc(g ? fmtMoney(x.profit_usd * g, 'GNF') : fmtUsd(x.profit_usd))}</span>${g ? `<span class="sub">${esc(fmtUsd(x.profit_usd))}</span>` : ''}`,
+    `${fmtNum(x.margin, 1)} %`] }));
+  return panel(t('If you sell all your stock at these prices'), `<div class="panel-b">${tiles(head)}<p class="sub gap-t">${esc(what)}</p>${left}</div>
+    <details class="gap-t"><summary class="panel-b" style="cursor:pointer">${esc(t('Gross profit by mix'))}</summary>
+    ${table([{ h: t('Mix') }, { h: t('Boxes'), n: true }, { h: t('Gross profit'), n: true }, { h: t('Margin'), n: true }], rows,
+      { foot: [esc(t('Total')), esc(fmtNum(r.boxes)), esc(g ? fmtMoney(r.profit_usd * g, 'GNF') : fmtUsd(r.profit_usd)), `${fmtNum(r.margin, 1)} %`] })}</details>`, { tight: true });
+}
 function pricelist() {
   const mixes = priceList();
   const priced = mixes.filter(m => m.price).length;
   const out = [header(t('Price list'), { sub: esc(t('{p} of {n} mixes in stock have a price', { p: priced, n: mixes.length })),
     actions: `<a class="btn" href="#/doc/pricelist/all">${esc(t('Print for customers'))}</a><button class="btn" data-act="priceCsv">${esc(t('Download CSV'))}</button>` }), subnav('pricelist')];
+  out.push(stockAtPricesPanel(mixes));
   if (!mixes.length) out.push(panel('', empty(t('No sealed boxes in stock.'))));
   for (const m of mixes) {
     const po = esc(m.source_po_id ?? ''), L = esc(m.source_label);

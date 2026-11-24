@@ -214,5 +214,13 @@ export const FR_BUY = {
   '{n} needed, raised to the supplier minimum of {m} boxes': '{n} nécessaire(s), porté(s) au minimum du fournisseur de {m} cartons', '{p}% of a {n}-box container': '{p} % d’un conteneur de {n} cartons',
   '— not a model I stock —': '— un modèle que je ne vends pas —', '“Order by” = the start of the event less the lead time ({l} weeks).': '« Commander avant » = le début de l’événement moins le délai ({l} semaines).',
   'Lead time': 'Le délai', 'Cover': 'La couverture', 'Container size': 'La taille du conteneur', 'Supplier minimum': 'Le minimum du fournisseur', 'History': 'L’historique', 'Maximum cover': 'La couverture maximum'
-  , 'Order (boxes)': 'À commander (cartons)'
+  , 'Order (boxes)': 'À commander (cartons)',
+  // the price list: if all the stock sold at these prices
+  'If you sell all your stock at these prices': 'Si vous vendez tout le stock à ces prix', 'margin': 'marge', 'bn': 'Md',
+  '{p} pairs in {n} priced mixes: {b} sealed boxes': '{p} paires dans {n} assortiments avec prix : {b} cartons fermés',
+  '{l} loose pairs in open boxes': '{l} paires au détail dans des cartons ouverts',
+  'Each mix at its 1-box price, against its landed cost.': 'Chaque assortiment à son prix pour 1 carton, moins son coût de revient.',
+  '1 USD = {r} GNF (rate of {d}).': '1 USD = {r} GNF (taux du {d}).',
+  'Not counted, no price yet: {list} — landed cost {c}.': 'Non compté, pas encore de prix : {list} — coût de revient {c}.',
+  'Gross profit by mix': 'Marge brute par assortiment', '{p} per pair': '{p} par paire'
 };
