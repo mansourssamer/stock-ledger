@@ -1,5 +1,5 @@
 // Documents customers receive, always in French: invoices and statements of account.
-// Shown inside the app with a Print button (print or save as PDF from the phone's share sheet).
+// Shown inside the app with Send (a PDF to the phone's share sheet), Download and Print.
 import { all, one } from './localdb.js';
 import * as Q from './queries.js';
 import { documentLines } from './queries.js';
@@ -9,6 +9,7 @@ import { getBlob } from './store.js';
 import { priceList } from './buy.js';
 import { proformaDoc } from './crmpages.js';
 import { stockDocHtml, stockPdf, stockText, loadPdfLib, pdfReady } from './stockdoc.js';
+import { domPdf } from './docpdf.js';
 import { schedule } from './app.js';
 import { registerActions } from './actions.js';
 
@@ -88,18 +89,27 @@ function priceListDoc() {
 }
 // Photos in a document are fetched from their own documents once it is on screen.
 export async function mountDoc() {
-  if (document.querySelector('[data-act="stockPdfSend"]')) loadPdfLib().catch(e => console.warn(e));   // ready before the tap
+  if (document.querySelector('[data-act="stockPdfSend"],[data-act="docPdfSend"]')) loadPdfLib().catch(e => console.warn(e));   // ready before the tap
   for (const img of document.querySelectorAll('.doc img[data-img]')) {
     const d = await getBlob('images', img.dataset.img);
     if (d && d.data) img.src = d.data; else img.closest('figure')?.remove();
   }
 }
 
+// The bar above a customer document: back, send the PDF, download it, print.
+const fileName = (...parts) => parts.filter(Boolean).join('-').replace(/[\\/:*?"<>|#%&{}$!'@+`=]+/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') + '.pdf';
+const docBar = (back, file, title) => `<div class="docbar"><a class="backlink" href="#/${esc(back)}">‹ Retour</a><span class="docbtns">
+  <button class="btn primary" data-act="docPdfSend" data-file="${esc(file)}" data-title="${esc(title)}">Envoyer le PDF</button>
+  <button class="btn" data-act="docPdfSave" data-file="${esc(file)}" data-title="${esc(title)}">Télécharger le PDF</button>
+  <button class="btn" onclick="window.print()">Imprimer</button></span></div>`;
+const todayIso = () => new Date().toISOString().slice(0, 10);
+
 export function renderDoc(kind, idRaw) {
   const id = /^\d+$/.test(idRaw) ? Number(idRaw) : idRaw;
   if (kind === 'proforma') {
-    const pf = one(`SELECT order_id FROM proformas WHERE id = ?`, [id]);
-    return `<div class="docbar"><a class="backlink" href="#/${pf && pf.order_id !== null ? 'order/' + esc(pf.order_id) : 'proformas'}">‹ Retour</a><button class="btn primary" onclick="window.print()">Imprimer / PDF</button></div><div class="doc">${proformaDoc(id)}</div>`;
+    const pf = one(`SELECT order_id, number FROM proformas WHERE id = ?`, [id]);
+    const title = `Facture proforma ${pf && pf.number ? pf.number : ''}`.trim();
+    return `${docBar(pf && pf.order_id !== null ? 'order/' + pf.order_id : 'proformas', fileName('Proforma', pf && pf.number), title)}<div class="doc">${proformaDoc(id)}</div>`;
   }
   if (kind === 'stock') {
     const L = stockLang(), T = stockText(L);
@@ -108,10 +118,14 @@ export function renderDoc(kind, idRaw) {
       <button class="btn primary" data-act="stockPdfSend">${esc(T.send)}</button><button class="btn" data-act="stockPdfSave">${esc(T.save)}</button><button class="btn" onclick="window.print()">${esc(T.print)}</button></div>
       <div class="doc">${stockDocHtml(L)}</div>`;
   }
-  if (kind === 'pricelist') return `<div class="docbar"><a class="backlink" href="#/pricelist">‹ Retour</a><button class="btn primary" onclick="window.print()">Imprimer / PDF</button></div><div class="doc">${withLang('fr', priceListDoc)}</div>`;
-  const back = kind === 'invoice' ? `order/${(one(`SELECT order_id FROM invoices WHERE id = ?`, [id]) || {}).order_id}` : `customer/${id}`;
+  if (kind === 'pricelist') return `${docBar('pricelist', fileName('Liste-de-prix', todayIso()), 'Liste de prix')}<div class="doc">${withLang('fr', priceListDoc)}</div>`;
   const body = withLang('fr', () => kind === 'invoice' ? invoiceDoc(id) : statementDoc(id));
-  return `<div class="docbar"><a class="backlink" href="#/${esc(back)}">‹ Retour</a><button class="btn primary" onclick="window.print()">Imprimer / PDF</button></div><div class="doc">${body}</div>`;
+  if (kind === 'invoice') {
+    const inv = one(`SELECT order_id, invoice_number FROM invoices WHERE id = ?`, [id]) || {};
+    return `${docBar(`order/${inv.order_id}`, fileName('Facture', inv.invoice_number), `Facture ${inv.invoice_number || ''}`.trim())}<div class="doc">${body}</div>`;
+  }
+  const c = one(`SELECT name FROM customers WHERE id = ?`, [id]) || {};
+  return `${docBar(`customer/${id}`, fileName('Releve-de-compte', String(c.name || '').trim(), todayIso()), `Relevé de compte — ${String(c.name || '').trim()}`)}<div class="doc">${body}</div>`;
 }
 
 // Send the stock document as a PDF: the phone's share sheet (WhatsApp, mail…) where there is one,
@@ -129,17 +143,21 @@ function stockLang() {
   if (!docLang) { try { docLang = localStorage.getItem('sl-stockdoc-lang'); } catch { /* private mode */ } }
   return docLang === 'en' || docLang === 'fr' ? docLang : (appLang() === 'en' ? 'en' : 'fr');
 }
-function sendStockPdf(share) {
+// Builds the PDF at once (the share sheet needs the tap), then shares or downloads it.
+function deliverPdf(make, share, title) {
   if (!pdfReady()) { toast('Préparation du PDF… réessayez dans un instant.'); loadPdfLib().catch(e => toast(e.message)); return; }
   let file;
-  try { file = stockPdf(stockLang()); } catch (e) { console.error(e); toast('Le PDF n’a pas pu être créé : ' + (e.message || e)); return; }
+  try { file = make(); } catch (e) { console.error(e); toast('Le PDF n’a pas pu être créé : ' + (e.message || e)); return; }
   if (share && navigator.canShare && navigator.canShare({ files: [file] })) {
-    navigator.share({ files: [file], title: stockText(stockLang()).share }).catch(e => { if (!e || e.name !== 'AbortError') downloadFile(file); });
+    navigator.share({ files: [file], title }).catch(e => { if (!e || e.name !== 'AbortError') downloadFile(file); });
     return;
   }
   downloadFile(file);
 }
+const sendStockPdf = share => deliverPdf(() => stockPdf(stockLang()), share, stockText(stockLang()).share);
+const sendDocPdf = (a, share) => deliverPdf(() => domPdf(document.querySelector('.doc'), a.dataset.file || 'document.pdf', a.dataset.title || ''), share, a.dataset.title || '');
 registerActions({
   stockPdfSend: () => sendStockPdf(true), stockPdfSave: () => sendStockPdf(false),
+  docPdfSend: a => sendDocPdf(a, true), docPdfSave: a => sendDocPdf(a, false),
   stockDocLang: a => { docLang = a.dataset.v; try { localStorage.setItem('sl-stockdoc-lang', docLang); } catch { /* private mode */ } schedule(); }
 });
